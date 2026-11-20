@@ -1,0 +1,3527 @@
+<!DOCTYPE html>
+<html lang="uz" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fokus3D Studio — 3D To-Do List, Kunlik Reja va Pomidor Study Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+          },
+          colors: {
+            glass: {
+              surface: 'rgba(15, 23, 42, 0.56)',
+              border: 'rgba(255, 255, 255, 0.14)',
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-dim: 0.45;
+      --bg-blur: 4px;
+      --scrollbar-thumb: rgba(148, 163, 184, 0.58);
+      --scrollbar-track: rgba(15, 23, 42, 0.72);
+      --accent-glow: rgba(99, 102, 241, 0.35);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+      background-color: #060913;
+      color: #f8fafc;
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Standard Scrollbar Styling with WCAG-compliant contrast + fallback */
+    .custom-scroll,
+    body {
+      scrollbar-width: thin;
+      scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    }
+
+    @supports not (scrollbar-color: auto) {
+      .custom-scroll,
+      body {
+        scrollbar-width: auto;
+      }
+      .custom-scroll::-webkit-scrollbar,
+      body::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      .custom-scroll::-webkit-scrollbar-thumb,
+      body::-webkit-scrollbar-thumb {
+        background: var(--scrollbar-thumb);
+        border-radius: 999px;
+      }
+      .custom-scroll::-webkit-scrollbar-track,
+      body::-webkit-scrollbar-track {
+        background: var(--scrollbar-track);
+      }
+    }
+
+    /* Background layers */
+    #wallpaper-layer {
+      position: fixed;
+      inset: -24px;
+      z-index: 0;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      filter: blur(var(--bg-blur));
+      transform: scale(1.04);
+      transition: background-image 0.55s ease, filter 0.2s ease;
+      pointer-events: none;
+    }
+
+    #dim-layer {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      background: radial-gradient(circle at 20% 20%, rgba(15, 23, 42, calc(var(--bg-dim) * 0.72)), rgba(3, 7, 18, var(--bg-dim)));
+      transition: background 0.2s ease;
+      pointer-events: none;
+    }
+
+    #three-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    #app-shell {
+      position: relative;
+      z-index: 10;
+      min-height: 100vh;
+    }
+
+    /* Glassmorphism System */
+    .glass-panel {
+      background: linear-gradient(145deg, rgba(15, 23, 42, 0.66), rgba(15, 23, 42, 0.44));
+      backdrop-filter: blur(18px) saturate(140%);
+      -webkit-backdrop-filter: blur(18px) saturate(140%);
+      border: 1px solid rgba(255, 255, 255, 0.13);
+      box-shadow: 0 12px 36px -8px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    }
+
+    .glass-card {
+      background: linear-gradient(155deg, rgba(30, 41, 59, 0.62), rgba(15, 23, 42, 0.52));
+      backdrop-filter: blur(16px) saturate(135%);
+      -webkit-backdrop-filter: blur(16px) saturate(135%);
+      border: 1px solid rgba(255, 255, 255, 0.13);
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+      transform-style: preserve-3d;
+      will-change: transform;
+      transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease, box-shadow 0.22s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .glass-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%), rgba(255, 255, 255, 0.11), transparent 52%);
+      opacity: 0;
+      transition: opacity 0.25s ease;
+      pointer-events: none;
+    }
+
+    .glass-card:hover::before {
+      opacity: 1;
+    }
+
+    .glass-card:hover {
+      border-color: rgba(129, 140, 248, 0.45);
+      box-shadow: 0 18px 40px -10px rgba(0, 0, 0, 0.65), 0 0 24px -6px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+
+    .glass-input {
+      background: rgba(15, 23, 42, 0.64);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #f8fafc;
+      transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+    }
+
+    .glass-input:focus {
+      outline: none;
+      border-color: #818cf8;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+      background: rgba(15, 23, 42, 0.84);
+    }
+
+    .glass-input option {
+      background-color: #0f172a;
+      color: #f8fafc;
+    }
+
+    /* Native Modal <dialog> per modern-web-guidance */
+    dialog.studio-dialog {
+      margin: auto;
+      padding: 0;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 1.25rem;
+      background: linear-gradient(155deg, rgba(15, 23, 42, 0.94), rgba(9, 14, 29, 0.96));
+      color: #f8fafc;
+      width: min(94vw, 560px);
+      max-height: 90vh;
+      box-shadow: 0 28px 70px -15px rgba(0, 0, 0, 0.8), 0 0 40px -12px rgba(99, 102, 241, 0.35);
+      backdrop-filter: blur(24px);
+    }
+
+    dialog.studio-dialog[open] {
+      display: flex;
+      flex-direction: column;
+      animation: dialogPop 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    dialog:modal {
+      overscroll-behavior: contain;
+    }
+
+    dialog::backdrop {
+      background: rgba(2, 6, 23, 0.72);
+      backdrop-filter: blur(8px);
+      overflow: hidden;
+      overscroll-behavior: contain;
+    }
+
+    @keyframes dialogPop {
+      from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.97);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    @keyframes overduePulse {
+      0%, 100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55);
+        opacity: 1;
+      }
+      50% {
+        box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+        opacity: 0.82;
+      }
+    }
+
+    .badge-overdue {
+      animation: overduePulse 1.8s infinite;
+    }
+
+    .kanban-column.drag-over {
+      border-color: rgba(129, 140, 248, 0.85);
+      background: rgba(99, 102, 241, 0.14);
+    }
+
+    .timer-ring-progress {
+      transition: stroke-dashoffset 0.5s linear, stroke 0.35s ease;
+    }
+
+    /* Range slider polish */
+    input[type="range"].studio-range {
+      accent-color: #818cf8;
+      cursor: pointer;
+    }
+
+    /* Zen Mode */
+    #zen-overlay {
+      background: radial-gradient(circle at center, rgba(2, 6, 23, 0.18), rgba(2, 6, 23, 0.52));
+      transition: opacity 0.3s ease;
+    }
+
+    /* Respect reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      .glass-card,
+      .badge-overdue,
+      dialog.studio-dialog[open] {
+        animation: none !important;
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body class="selection:bg-indigo-500/40 selection:text-white">
+  <!-- Layered Visual Environment -->
+  <div id="wallpaper-layer" aria-hidden="true"></div>
+  <div id="dim-layer" aria-hidden="true"></div>
+  <canvas id="three-canvas" aria-hidden="true"></canvas>
+
+  <!-- Hidden File Inputs -->
+  <input type="file" id="quick-wallpaper-input" accept="image/*" multiple class="hidden" />
+  <input type="file" id="json-import-input" accept="application/json,.json" class="hidden" />
+
+  <!-- Toast Container -->
+  <div id="toast-container" aria-live="polite" class="fixed bottom-5 right-5 z-[100] flex flex-col gap-2.5 max-w-sm pointer-events-none"></div>
+
+  <!-- Main Application Shell -->
+  <div id="app-shell" class="flex min-h-screen">
+    <!-- Mobile Sidebar Backdrop -->
+    <div id="mobile-sidebar-backdrop" class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-30 hidden lg:hidden" onclick="toggleMobileSidebar(false)"></div>
+
+    <!-- Left Navigation Sidebar -->
+    <aside id="sidebar" class="fixed lg:sticky top-0 left-0 z-40 h-screen w-72 shrink-0 glass-panel border-y-0 border-l-0 flex flex-col transition-transform duration-300 -translate-x-full lg:translate-x-0">
+      <!-- Brand -->
+      <div class="p-5 border-b border-white/10 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 via-violet-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-indigo-500/30 font-extrabold text-lg text-white">
+            F3D
+          </div>
+          <div>
+            <h1 class="font-extrabold text-base tracking-tight text-white leading-tight">Fokus3D Studio</h1>
+            <p class="text-[11px] text-indigo-300/90 font-medium">3D To-Do &amp; Pomidor Hub</p>
+          </div>
+        </div>
+        <button type="button" onclick="toggleMobileSidebar(false)" class="lg:hidden p-1.5 rounded-lg hover:bg-white/10 text-slate-300" aria-label="Menyuni yopish">✕</button>
+      </div>
+
+      <!-- Sidebar Scrollable Content -->
+      <div class="flex-1 overflow-y-auto custom-scroll p-3.5 space-y-5">
+        <!-- Main Sections -->
+        <div>
+          <p class="px-2.5 mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">Asosiy Bo'limlar</p>
+          <nav class="space-y-1" aria-label="Asosiy bo'limlar">
+            <button type="button" data-section="tasks" onclick="switchSection('tasks')" class="nav-section-btn w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition">
+              <span class="flex items-center gap-2.5"><span>📋</span> <span>Vazifalar &amp; Reja</span></span>
+              <span id="nav-badge-active" class="text-xs px-2 py-0.5 rounded-full bg-indigo-500/25 text-indigo-200 font-mono">0</span>
+            </button>
+            <button type="button" data-section="pomodoro" onclick="switchSection('pomodoro')" class="nav-section-btn w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition">
+              <span class="flex items-center gap-2.5"><span>🍅</span> <span>Pomidor &amp; Study Hub</span></span>
+              <span id="nav-badge-timer" class="text-[11px] px-2 py-0.5 rounded-full bg-rose-500/25 text-rose-200 font-mono">25:00</span>
+            </button>
+            <button type="button" data-section="wallpapers" onclick="switchSection('wallpapers')" class="nav-section-btn w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition">
+              <span class="flex items-center gap-2.5"><span>🖼️</span> <span>3D Fon &amp; Rasmlar</span></span>
+              <span id="nav-badge-wp" class="text-[11px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-200">3D</span>
+            </button>
+            <button type="button" data-section="habits" onclick="switchSection('habits')" class="nav-section-btn w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition">
+              <span class="flex items-center gap-2.5"><span>📊</span> <span>Odatlar &amp; Statistika</span></span>
+              <span id="nav-badge-streak" class="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-200 font-mono">🔥0</span>
+            </button>
+          </nav>
+        </div>
+
+        <!-- Smart Task Filters -->
+        <div>
+          <p class="px-2.5 mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">Aqlli Filtrlar</p>
+          <div class="space-y-1">
+            <button type="button" data-filter="all" onclick="setTaskFilter('all')" class="filter-btn w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition">
+              <span class="flex items-center gap-2.5"><span>🗂️</span> <span>Barcha vazifalar</span></span>
+              <span id="count-all" class="text-xs font-mono text-slate-400">0</span>
+            </button>
+            <button type="button" data-filter="today" onclick="setTaskFilter('today')" class="filter-btn w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition">
+              <span class="flex items-center gap-2.5"><span>☀️</span> <span>Bugungi kun rejasi</span></span>
+              <span id="count-today" class="text-xs font-mono text-slate-400">0</span>
+            </button>
+            <button type="button" data-filter="urgent" onclick="setTaskFilter('urgent')" class="filter-btn w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition">
+              <span class="flex items-center gap-2.5"><span>🔥</span> <span>Deadline yaqin &amp; Muhim</span></span>
+              <span id="count-urgent" class="text-xs font-mono text-slate-400">0</span>
+            </button>
+            <button type="button" data-filter="completed" onclick="setTaskFilter('completed')" class="filter-btn w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition">
+              <span class="flex items-center gap-2.5"><span>✅</span> <span>Bajarilgan ishlar</span></span>
+              <span id="count-completed" class="text-xs font-mono text-slate-400">0</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Categories -->
+        <div>
+          <div class="px-2.5 mb-2 flex items-center justify-between">
+            <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Kategoriyalar</p>
+            <button type="button" onclick="openCategoryModal()" class="text-[11px] font-semibold text-indigo-300 hover:text-indigo-200 px-2 py-0.5 rounded-md bg-indigo-500/20 hover:bg-indigo-500/30 transition">
+              + Yangi
+            </button>
+          </div>
+          <div id="sidebar-categories" class="space-y-1"></div>
+        </div>
+      </div>
+
+      <!-- Bottom Quick 3D Scene Selector -->
+      <div class="p-3.5 border-t border-white/10 space-y-2.5 bg-slate-950/30">
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-300 font-medium">✨ 3D Effekt</span>
+          <select id="sidebar-3d-select" onchange="setThreeEffect(this.value)" aria-label="3D fon effektini tanlash" class="glass-input rounded-lg px-2 py-1 text-xs font-medium">
+            <option value="crystals">3D Kristallar</option>
+            <option value="stars">Yulduzli Koinot</option>
+            <option value="sakura">Sakura Yaproqlari</option>
+            <option value="rain">3D Yomg'ir</option>
+            <option value="off">3D O'chiq</option>
+          </select>
+        </div>
+        <button type="button" onclick="toggleZenMode(true)" class="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-indigo-600/80 to-violet-600/80 hover:from-indigo-500 hover:to-violet-500 border border-white/15 text-xs font-bold text-white shadow-lg shadow-indigo-900/40 flex items-center justify-center gap-2 transition">
+          <span>🌌</span> <span>3D Fokus Rejimi (Zen)</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content Column -->
+    <div class="flex-1 flex flex-col min-w-0">
+      <!-- Top Header Bar -->
+      <header class="sticky top-0 z-20 glass-panel border-t-0 border-x-0 px-4 lg:px-7 py-3">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <!-- Left: Menu toggle + Date & Greeting -->
+          <div class="flex items-center gap-3">
+            <button type="button" onclick="toggleMobileSidebar(true)" class="lg:hidden p-2 rounded-xl bg-white/10 hover:bg-white/15 text-white" aria-label="Menyuni ochish">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+            </button>
+            <div>
+              <div class="flex items-center gap-2">
+                <h2 id="header-section-title" class="text-base sm:text-lg font-extrabold text-white tracking-tight">Vazifalar &amp; Kunlik Reja</h2>
+                <span id="storage-indicator" class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 border border-emerald-400/30 text-emerald-300" title="Barcha ma'lumotlar brauzer localStorage xotirasida avtomatik saqlanmoqda">
+                  <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>LocalStorage Faol</span>
+                </span>
+              </div>
+              <p id="header-date-line" class="text-xs text-slate-300/90 mt-0.5"></p>
+            </div>
+          </div>
+
+          <!-- Right: Quick Actions -->
+          <div class="flex items-center flex-wrap gap-2">
+            <button type="button" onclick="triggerQuickWallpaperUpload()" class="px-3 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/30 text-cyan-200 text-xs font-semibold flex items-center gap-1.5 transition" title="Kompyuter yoki telefon galereyasidan fon rasmi yuklash">
+              <span>📸</span> <span class="hidden sm:inline">+ Galereyadan fon</span>
+            </button>
+            <button type="button" onclick="toggleZenMode(true)" class="px-3 py-2 rounded-xl bg-violet-500/15 hover:bg-violet-500/25 border border-violet-400/30 text-violet-200 text-xs font-semibold flex items-center gap-1.5 transition" title="3D Zen Fokus Rejimi (Z)">
+              <span>🧘</span> <span class="hidden md:inline">Zen Rejim</span>
+            </button>
+            <button type="button" onclick="openSettingsModal()" class="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-slate-100 text-xs font-semibold flex items-center gap-1.5 transition" title="Sozlamalar, JSON Eksport / Import">
+              <span>⚙️</span> <span class="hidden md:inline">Sozlamalar</span>
+            </button>
+            <button type="button" onclick="openTaskModal()" class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-400 hover:to-violet-400 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 flex items-center gap-1.5 transition">
+              <span>＋</span> <span>Yangi vazifa</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- Mood & Motivation Strip -->
+      <section class="px-4 lg:px-7 pt-4">
+        <div class="glass-panel rounded-2xl px-4 py-3 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+          <!-- Mood Selector -->
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs font-semibold text-slate-300 mr-1">Bugungi kayfiyatingiz:</span>
+            <button type="button" data-mood="energetic" onclick="setMood('energetic')" class="mood-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold border border-white/10 bg-white/5 hover:bg-white/15 transition">🔥 G'ayratli</button>
+            <button type="button" data-mood="great" onclick="setMood('great')" class="mood-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold border border-white/10 bg-white/5 hover:bg-white/15 transition">😊 A'lo</button>
+            <button type="button" data-mood="calm" onclick="setMood('calm')" class="mood-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold border border-white/10 bg-white/5 hover:bg-white/15 transition">🧘 Xotirjam</button>
+            <button type="button" data-mood="tired" onclick="setMood('tired')" class="mood-btn px-2.5 py-1.5 rounded-xl text-xs font-semibold border border-white/10 bg-white/5 hover:bg-white/15 transition">☕ Biroz charchoq</button>
+          </div>
+
+          <!-- Motivation Quote -->
+          <div class="flex items-center justify-between xl:justify-end gap-3 min-w-0">
+            <div class="text-xs text-slate-200/95 italic truncate" id="motivation-quote-text"></div>
+            <button type="button" onclick="nextMotivationQuote()" class="shrink-0 p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs text-indigo-200 transition" title="Yangi motivatsion iqtibos" aria-label="Yangi motivatsion iqtibos">↻</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Dynamic Section Viewport -->
+      <main class="flex-1 p-4 lg:p-7 space-y-6">
+
+        <!-- ===================== SECTION 1: TASKS & PLANNER ===================== -->
+        <div id="section-tasks" class="space-y-5">
+          <!-- Quick Stats Row -->
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div class="glass-card tilt-card rounded-2xl p-4">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold text-slate-300">Bugungi vazifalar</span>
+                <span class="text-lg">☀️</span>
+              </div>
+              <p id="stat-today-tasks" class="text-2xl font-extrabold text-white font-mono mt-1.5">0</p>
+              <p class="text-[11px] text-indigo-300 mt-0.5" id="stat-today-sub">Reja bo'yicha</p>
+            </div>
+            <div class="glass-card tilt-card rounded-2xl p-4">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold text-slate-300">Bajarilish foizi</span>
+                <span class="text-lg">🎯</span>
+              </div>
+              <p id="stat-completion-rate" class="text-2xl font-extrabold text-emerald-300 font-mono mt-1.5">0%</p>
+              <div class="w-full h-1.5 bg-white/10 rounded-full mt-2 overflow-hidden">
+                <div id="stat-completion-bar" class="h-full bg-gradient-to-r from-emerald-400 to-cyan-400 rounded-full transition-all duration-500" style="width:0%"></div>
+              </div>
+            </div>
+            <div class="glass-card tilt-card rounded-2xl p-4">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold text-slate-300">Bugungi Fokus</span>
+                <span class="text-lg">🍅</span>
+              </div>
+              <p id="stat-focus-today" class="text-2xl font-extrabold text-rose-300 font-mono mt-1.5">0 daq</p>
+              <p class="text-[11px] text-slate-300 mt-0.5" id="stat-pomo-today-count">0 ta pomidor</p>
+            </div>
+            <div class="glass-card tilt-card rounded-2xl p-4">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold text-slate-300">Muddati o'tgan / Muhim</span>
+                <span class="text-lg">⚡</span>
+              </div>
+              <p id="stat-overdue-count" class="text-2xl font-extrabold text-amber-300 font-mono mt-1.5">0</p>
+              <p class="text-[11px] text-slate-300 mt-0.5">Diqqat talab qiladi</p>
+            </div>
+          </div>
+
+          <!-- Controls Toolbar -->
+          <div class="glass-panel rounded-2xl p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div class="flex flex-1 flex-wrap items-center gap-2.5">
+              <!-- Search -->
+              <div class="relative flex-1 min-w-[200px]">
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">🔍</span>
+                <input id="task-search-input" type="search" oninput="setTaskSearch(this.value)" placeholder="Vazifa, qadam yoki kategoriya qidirish..." class="glass-input w-full rounded-xl pl-9 pr-3 py-2 text-sm" />
+              </div>
+
+              <!-- Sort -->
+              <select id="task-sort-select" onchange="setTaskSort(this.value)" aria-label="Vazifalarni saralash" class="glass-input rounded-xl px-3 py-2 text-xs sm:text-sm font-medium">
+                <option value="deadline">⏳ Deadline bo'yicha</option>
+                <option value="priority">🔥 Muhimlik bo'yicha</option>
+                <option value="newest">✨ Eng yangilari</option>
+              </select>
+
+              <!-- Active Category Clear Pill -->
+              <button type="button" id="clear-cat-filter-btn" onclick="setCategoryFilter(null)" class="hidden px-3 py-2 rounded-xl bg-indigo-500/25 border border-indigo-400/40 text-indigo-100 text-xs font-semibold items-center gap-1.5">
+                <span id="active-cat-filter-label"></span>
+                <span>✕</span>
+              </button>
+            </div>
+
+            <!-- View Switcher -->
+            <div class="flex items-center gap-1.5 bg-slate-950/50 p-1 rounded-xl border border-white/10 self-start md:self-auto">
+              <button type="button" id="view-btn-grid" onclick="setTaskViewMode('grid')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5">
+                <span>🧊</span> <span>3D Kartalar</span>
+              </button>
+              <button type="button" id="view-btn-kanban" onclick="setTaskViewMode('kanban')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5">
+                <span>📌</span> <span>Kanban Doska</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Tasks Container -->
+          <div id="tasks-render-root"></div>
+        </div>
+
+        <!-- ===================== SECTION 2: POMODORO & STUDY HUB ===================== -->
+        <div id="section-pomodoro" class="hidden space-y-6">
+          <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+            <!-- Left: Main Timer & Ambient Audio -->
+            <div class="xl:col-span-7 space-y-5">
+              <!-- Timer Card -->
+              <div class="glass-panel rounded-3xl p-6 sm:p-8 flex flex-col items-center text-center relative overflow-hidden">
+                <!-- Mode Tabs -->
+                <div class="flex flex-wrap justify-center gap-2 mb-6">
+                  <button type="button" data-pomo-mode="pomodoro" onclick="selectPomoMode('pomodoro')" class="pomo-mode-btn px-3.5 py-2 rounded-xl text-xs font-bold transition">🍅 Pomidor (25)</button>
+                  <button type="button" data-pomo-mode="deep" onclick="selectPomoMode('deep')" class="pomo-mode-btn px-3.5 py-2 rounded-xl text-xs font-bold transition">🚀 Chuqur Fokus (50)</button>
+                  <button type="button" data-pomo-mode="short" onclick="selectPomoMode('short')" class="pomo-mode-btn px-3.5 py-2 rounded-xl text-xs font-bold transition">☕ Qisqa Tanaffus (5)</button>
+                  <button type="button" data-pomo-mode="long" onclick="selectPomoMode('long')" class="pomo-mode-btn px-3.5 py-2 rounded-xl text-xs font-bold transition">🌿 Katta Tanaffus (15)</button>
+                </div>
+
+                <!-- Custom Minutes Input -->
+                <div class="flex items-center gap-2 mb-6">
+                  <label for="custom-pomo-minutes" class="text-xs text-slate-300 font-medium">Maxsus daqiqa:</label>
+                  <input id="custom-pomo-minutes" type="number" min="1" max="180" value="35" class="glass-input w-20 rounded-lg px-2.5 py-1 text-xs font-mono text-center" />
+                  <button type="button" onclick="applyCustomPomoMinutes()" class="px-3 py-1 rounded-lg bg-indigo-500/25 hover:bg-indigo-500/40 border border-indigo-400/35 text-xs font-semibold text-indigo-100 transition">Qo'llash</button>
+                </div>
+
+                <!-- Circular SVG Progress Timer -->
+                <div class="relative w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center my-1">
+                  <svg class="w-full h-full -rotate-90 drop-shadow-[0_0_24px_rgba(99,102,241,0.35)]" viewBox="0 0 260 260">
+                    <defs>
+                      <linearGradient id="pomoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#818cf8" />
+                        <stop offset="50%" stop-color="#c084fc" />
+                        <stop offset="100%" stop-color="#38bdf8" />
+                      </linearGradient>
+                    </defs>
+                    <circle cx="130" cy="130" r="112" fill="none" stroke="rgba(255,255,255,0.09)" stroke-width="12" />
+                    <circle id="pomo-progress-circle" class="timer-ring-progress" cx="130" cy="130" r="112" fill="none" stroke="url(#pomoGrad)" stroke-width="12" stroke-linecap="round" stroke-dasharray="703.72" stroke-dashoffset="0" />
+                  </svg>
+                  <div class="absolute inset-0 flex flex-col items-center justify-center px-4">
+                    <span id="pomo-mode-label" class="text-xs font-bold uppercase tracking-widest text-indigo-300 mb-1">Pomidor Fokus</span>
+                    <div id="pomo-time-display" class="text-5xl sm:text-6xl font-extrabold font-mono tracking-tight text-white">25:00</div>
+                    <p id="pomo-linked-preview" class="text-xs text-slate-300 mt-2 max-w-[190px] truncate">Vazifa tanlanmagan</p>
+                  </div>
+                </div>
+
+                <!-- Task Link Selector -->
+                <div class="w-full max-w-md mt-5 text-left">
+                  <label for="pomo-task-select" class="block text-xs font-semibold text-slate-300 mb-1.5">🎯 Qaysi vazifa yoki o'qish bloki ustida ishlayapsiz?</label>
+                  <select id="pomo-task-select" onchange="setLinkedFocusTarget(this.value)" class="glass-input w-full rounded-xl px-3.5 py-2.5 text-sm"></select>
+                </div>
+
+                <!-- Timer Action Buttons -->
+                <div class="flex flex-wrap items-center justify-center gap-3 mt-6">
+                  <button type="button" id="pomo-start-btn" onclick="togglePomoTimer()" class="px-7 py-3 rounded-2xl bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500 hover:brightness-110 text-white font-extrabold text-sm shadow-xl shadow-indigo-600/35 transition flex items-center gap-2">
+                    <span>▶</span> <span>Boshlash</span>
+                  </button>
+                  <button type="button" onclick="resetPomoTimer()" class="px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/15 text-slate-100 font-semibold text-sm transition">
+                    ↺ Qayta
+                  </button>
+                  <button type="button" onclick="completePomoEarly()" class="px-4 py-3 rounded-2xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/35 text-emerald-200 font-semibold text-sm transition" title="Sessiyani yakunlab +1 pomidor yozish">
+                    ✓ Yakunlash
+                  </button>
+                  <button type="button" onclick="toggleZenMode(true)" class="px-4 py-3 rounded-2xl bg-violet-500/20 hover:bg-violet-500/30 border border-violet-400/35 text-violet-200 font-semibold text-sm transition">
+                    🌌 Zen
+                  </button>
+                </div>
+              </div>
+
+              <!-- Web Audio Ambient Sound Synthesizer -->
+              <div class="glass-panel rounded-3xl p-5 sm:p-6 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 class="text-sm font-extrabold text-white flex items-center gap-2">🎧 Ambient Fokus Ovoz Sintezatori</h3>
+                    <p class="text-xs text-slate-300 mt-0.5">Tashqi faylsiz Web Audio API orqali jonli generatsiya qilinadi</p>
+                  </div>
+                  <button type="button" onclick="playCompletionBell()" class="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-200 text-xs font-semibold transition">
+                    🔔 Qo'ng'iroqni sinash
+                  </button>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <button type="button" data-sound="off" onclick="setAmbientSound('off')" class="sound-btn px-3 py-3 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/15 text-xs font-bold flex flex-col items-center gap-1.5 transition">
+                    <span class="text-xl">🔕</span><span>O'chiq</span>
+                  </button>
+                  <button type="button" data-sound="rain" onclick="setAmbientSound('rain')" class="sound-btn px-3 py-3 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/15 text-xs font-bold flex flex-col items-center gap-1.5 transition">
+                    <span class="text-xl">🌧️</span><span>Mayin Yomg'ir</span>
+                  </button>
+                  <button type="button" data-sound="ocean" onclick="setAmbientSound('ocean')" class="sound-btn px-3 py-3 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/15 text-xs font-bold flex flex-col items-center gap-1.5 transition">
+                    <span class="text-xl">🌊</span><span>Tinch Okean</span>
+                  </button>
+                  <button type="button" data-sound="alpha" onclick="setAmbientSound('alpha')" class="sound-btn px-3 py-3 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/15 text-xs font-bold flex flex-col items-center gap-1.5 transition">
+                    <span class="text-xl">🧠</span><span>432Hz Alfa</span>
+                  </button>
+                </div>
+
+                <div class="flex items-center gap-3 pt-1">
+                  <span class="text-xs font-semibold text-slate-300 shrink-0">🔊 Ovoz balandligi:</span>
+                  <input id="ambient-volume-slider" type="range" min="0" max="100" value="45" oninput="setAmbientVolume(this.value)" class="studio-range flex-1" />
+                  <span id="ambient-volume-val" class="text-xs font-mono text-indigo-200 w-10 text-right">45%</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: Study Sessions Planner & History -->
+            <div class="xl:col-span-5 space-y-5">
+              <!-- Study Blocks Planner -->
+              <div class="glass-panel rounded-3xl p-5 sm:p-6 space-y-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h3 class="text-sm font-extrabold text-white">📚 O'qish Sessiyalari Rejasi</h3>
+                    <p class="text-xs text-slate-300 mt-0.5">Fan yoki mavzu bo'yicha pomidor bloklari</p>
+                  </div>
+                </div>
+
+                <form id="study-block-form" onsubmit="addStudyBlock(event)" class="flex flex-col sm:flex-row gap-2">
+                  <input id="study-subject-input" type="text" required placeholder="Masalan: Matematika / IELTS Listening" class="glass-input flex-1 rounded-xl px-3 py-2 text-xs sm:text-sm" />
+                  <div class="flex gap-2">
+                    <select id="study-pomos-input" class="glass-input rounded-xl px-2.5 py-2 text-xs font-mono" aria-label="Pomidor soni">
+                      <option value="1">1 🍅</option>
+                      <option value="2">2 🍅</option>
+                      <option value="3" selected>3 🍅</option>
+                      <option value="4">4 🍅</option>
+                      <option value="5">5 🍅</option>
+                      <option value="6">6 🍅</option>
+                    </select>
+                    <button type="submit" class="px-3.5 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-bold transition shrink-0">+ Qo'shish</button>
+                  </div>
+                </form>
+
+                <div id="study-blocks-list" class="space-y-2.5 max-h-72 overflow-y-auto custom-scroll pr-1"></div>
+              </div>
+
+              <!-- Today's Study History -->
+              <div class="glass-panel rounded-3xl p-5 sm:p-6 space-y-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h3 class="text-sm font-extrabold text-white">🕒 Bugungi O'qish Tarixi</h3>
+                    <p id="study-history-summary" class="text-xs text-emerald-300 mt-0.5 font-medium">Jami: 0 daqiqa (0 ta sessiya)</p>
+                  </div>
+                  <button type="button" onclick="clearTodayStudyHistory()" class="text-[11px] text-slate-400 hover:text-rose-300 transition">Tozalash</button>
+                </div>
+                <div id="study-history-list" class="space-y-2 max-h-72 overflow-y-auto custom-scroll pr-1"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===================== SECTION 3: 3D WALLPAPER STUDIO ===================== -->
+        <div id="section-wallpapers" class="hidden space-y-6">
+          <!-- Controls: 3D Scene, Dim, Blur, External URL -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+            <div class="lg:col-span-7 glass-panel rounded-3xl p-5 sm:p-6 space-y-5">
+              <h3 class="text-sm font-extrabold text-white flex items-center gap-2">✨ 3D WebGL Sahna va Atmosfera Sozlamalari</h3>
+
+              <!-- 3D Effect Pills -->
+              <div class="space-y-2">
+                <p class="text-xs text-slate-300 font-semibold">Interaktiv Three.js 3D Qatlam (sichqoncha harakatiga javob beradi):</p>
+                <div class="flex flex-wrap gap-2">
+                  <button type="button" data-three="crystals" onclick="setThreeEffect('crystals')" class="three-pill px-3.5 py-2 rounded-xl text-xs font-bold border border-white/15 bg-white/5 hover:bg-white/15 transition">💎 3D Kristallar</button>
+                  <button type="button" data-three="stars" onclick="setThreeEffect('stars')" class="three-pill px-3.5 py-2 rounded-xl text-xs font-bold border border-white/15 bg-white/5 hover:bg-white/15 transition">🌌 Yulduzli Koinot</button>
+                  <button type="button" data-three="sakura" onclick="setThreeEffect('sakura')" class="three-pill px-3.5 py-2 rounded-xl text-xs font-bold border border-white/15 bg-white/5 hover:bg-white/15 transition">🌸 Sakura Yaproqlari</button>
+                  <button type="button" data-three="rain" onclick="setThreeEffect('rain')" class="three-pill px-3.5 py-2 rounded-xl text-xs font-bold border border-white/15 bg-white/5 hover:bg-white/15 transition">🌧️ 3D Yomg'ir</button>
+                  <button type="button" data-three="off" onclick="setThreeEffect('off')" class="three-pill px-3.5 py-2 rounded-xl text-xs font-bold border border-white/15 bg-white/5 hover:bg-white/15 transition">⏸️ 3D O'chiq</button>
+                </div>
+              </div>
+
+              <!-- Sliders -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                <div class="space-y-1.5">
+                  <div class="flex justify-between text-xs">
+                    <span class="text-slate-300 font-semibold">🌑 Fon qoramtirligi (Dim)</span>
+                    <span id="dim-value-label" class="font-mono text-indigo-300">45%</span>
+                  </div>
+                  <input id="dim-slider" type="range" min="0" max="85" value="45" oninput="setWallpaperDim(this.value)" class="studio-range w-full" />
+                </div>
+                <div class="space-y-1.5">
+                  <div class="flex justify-between text-xs">
+                    <span class="text-slate-300 font-semibold">🌫️ Xiralashtirish (Blur)</span>
+                    <span id="blur-value-label" class="font-mono text-indigo-300">4px</span>
+                  </div>
+                  <input id="blur-slider" type="range" min="0" max="24" value="4" oninput="setWallpaperBlur(this.value)" class="studio-range w-full" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Add External URL + Upload Info -->
+            <div class="lg:col-span-5 glass-panel rounded-3xl p-5 sm:p-6 space-y-4">
+              <h3 class="text-sm font-extrabold text-white">🔗 Tashqi Rasm URL yoki Galereya</h3>
+              <form onsubmit="addWallpaperByUrl(event)" class="space-y-2.5">
+                <input id="wp-url-input" type="url" required placeholder="https://example.com/rasm.jpg" class="glass-input w-full rounded-xl px-3.5 py-2 text-xs sm:text-sm" />
+                <div class="flex gap-2">
+                  <input id="wp-name-input" type="text" placeholder="Fon nomi (ixtiyoriy)" class="glass-input flex-1 rounded-xl px-3.5 py-2 text-xs sm:text-sm" />
+                  <button type="submit" class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold text-xs transition shrink-0">Qo'shish</button>
+                </div>
+              </form>
+              <div class="pt-2 border-t border-white/10 flex items-center justify-between gap-2">
+                <p class="text-[11px] text-slate-300">Qurilmadan yuklangan rasmlar Canvas orqali JPEG (max 1440×900, 0.82) siqilib LocalStorage'da saqlanadi.</p>
+                <button type="button" onclick="triggerQuickWallpaperUpload()" class="shrink-0 px-3 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/45 border border-indigo-400/40 text-xs font-bold text-indigo-100 transition">📁 Tanlash</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Wallpaper Gallery Grid -->
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-extrabold text-white">🖼️ Orqa Fonlar Galereyasi (Shaxsiy + 12 ta Tayyor Fon)</h3>
+              <span id="custom-wp-count" class="text-xs text-cyan-300 font-semibold"></span>
+            </div>
+            <div id="wallpaper-gallery-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+          </div>
+        </div>
+
+        <!-- ===================== SECTION 4: HABITS & STATS ===================== -->
+        <div id="section-habits" class="hidden space-y-6">
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <!-- Habit Tracker -->
+            <div class="lg:col-span-7 glass-panel rounded-3xl p-5 sm:p-6 space-y-4">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 class="text-base font-extrabold text-white">🔥 Kunlik Odatlar Trekeri (Habit Tracker)</h3>
+                  <p class="text-xs text-slate-300 mt-0.5">Har kuni belgilang va uzluksiz seriyangizni (streak) oshiring</p>
+                </div>
+              </div>
+
+              <form onsubmit="addHabit(event)" class="flex flex-wrap sm:flex-nowrap gap-2">
+                <input id="habit-emoji-input" type="text" value="✨" maxlength="4" aria-label="Odat emojisi" class="glass-input w-14 text-center rounded-xl px-2 py-2 text-base" />
+                <input id="habit-name-input" type="text" required placeholder="Yangi odat (masalan: 30 daqiqa kitob o'qish)" class="glass-input flex-1 rounded-xl px-3.5 py-2 text-sm" />
+                <button type="submit" class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition shrink-0">+ Odat qo'shish</button>
+              </form>
+
+              <div id="habits-list" class="space-y-3"></div>
+            </div>
+
+            <!-- Statistics & Category Progress -->
+            <div class="lg:col-span-5 space-y-5">
+              <!-- Summary Card -->
+              <div class="glass-panel rounded-3xl p-5 sm:p-6 space-y-4">
+                <h3 class="text-base font-extrabold text-white">📈 Haftalik Fokus Faolligi</h3>
+                <div id="weekly-chart" class="grid grid-cols-7 gap-2 items-end h-36 pt-4"></div>
+                <div class="grid grid-cols-2 gap-3 pt-2 border-t border-white/10">
+                  <div class="rounded-2xl bg-white/5 p-3">
+                    <p class="text-[11px] text-slate-400">Jami Pomidorlar</p>
+                    <p id="stats-total-pomos" class="text-xl font-extrabold font-mono text-rose-300 mt-0.5">0 🍅</p>
+                  </div>
+                  <div class="rounded-2xl bg-white/5 p-3">
+                    <p class="text-[11px] text-slate-400">Jami Fokus Vaqti</p>
+                    <p id="stats-total-minutes" class="text-xl font-extrabold font-mono text-indigo-300 mt-0.5">0 soat</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Category Completion Breakdown -->
+              <div class="glass-panel rounded-3xl p-5 sm:p-6 space-y-4">
+                <h3 class="text-base font-extrabold text-white">🗂️ Kategoriyalar Bo'yicha Bajarilish</h3>
+                <div id="category-stats-list" class="space-y-3 max-h-80 overflow-y-auto custom-scroll pr-1"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- ===================== FULLSCREEN 3D ZEN FOCUS OVERLAY ===================== -->
+  <div id="zen-overlay" class="fixed inset-0 z-50 hidden flex-col items-center justify-between p-6 sm:p-10 text-center">
+    <!-- Top Zen Bar -->
+    <div class="w-full max-w-4xl flex flex-wrap items-center justify-between gap-3">
+      <div class="glass-panel rounded-2xl px-4 py-2 flex items-center gap-2.5 text-xs font-bold text-white">
+        <span>🌌 Fokus3D Zen Rejim</span>
+        <span class="text-slate-400">•</span>
+        <span id="zen-clock" class="font-mono text-indigo-300">00:00</span>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <button type="button" onclick="cycleWallpaperQuick()" class="glass-panel hover:bg-white/15 px-3.5 py-2 rounded-xl text-xs font-semibold text-white transition">🖼️ Fonni almashtirish</button>
+        <button type="button" onclick="cycleThreeEffectQuick()" class="glass-panel hover:bg-white/15 px-3.5 py-2 rounded-xl text-xs font-semibold text-white transition">✨ 3D Effekt</button>
+        <button type="button" onclick="cycleAmbientSoundQuick()" id="zen-sound-btn" class="glass-panel hover:bg-white/15 px-3.5 py-2 rounded-xl text-xs font-semibold text-white transition">🎧 Ovoz: O'chiq</button>
+        <button type="button" onclick="toggleZenMode(false)" class="px-4 py-2 rounded-xl bg-rose-500/80 hover:bg-rose-500 text-white text-xs font-bold transition">✕ Chiqish (Esc)</button>
+      </div>
+    </div>
+
+    <!-- Center Zen Timer & Task -->
+    <div class="glass-panel rounded-[2.5rem] px-8 sm:px-14 py-10 max-w-xl w-full space-y-5 shadow-2xl">
+      <p id="zen-mode-badge" class="inline-block px-3.5 py-1 rounded-full bg-indigo-500/25 border border-indigo-400/35 text-xs font-bold uppercase tracking-widest text-indigo-200">Pomidor Fokus</p>
+      <div id="zen-timer-display" class="text-7xl sm:text-8xl font-extrabold font-mono text-white tracking-tight drop-shadow-[0_0_32px_rgba(129,140,248,0.5)]">25:00</div>
+      <div class="space-y-1">
+        <p class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Joriy Fokus Vazifasi</p>
+        <p id="zen-task-title" class="text-base sm:text-lg font-bold text-slate-100">Erkin o'qish sessiyasi</p>
+      </div>
+      <div class="flex items-center justify-center gap-3 pt-2">
+        <button type="button" id="zen-start-btn" onclick="togglePomoTimer()" class="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-indigo-500 to-violet-500 hover:brightness-110 text-white font-extrabold text-sm shadow-xl shadow-indigo-600/40 transition">▶ Boshlash</button>
+        <button type="button" onclick="resetPomoTimer()" class="px-5 py-3.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-sm transition">↺ Qayta</button>
+      </div>
+    </div>
+
+    <!-- Bottom Zen Quote -->
+    <p id="zen-quote" class="max-w-2xl text-xs sm:text-sm text-slate-200/90 italic glass-panel px-5 py-2.5 rounded-full"></p>
+  </div>
+
+  <!-- ===================== MODAL 1: CREATE / EDIT TASK ===================== -->
+  <dialog id="task-dialog" class="studio-dialog" closedby="any" aria-labelledby="task-dialog-title">
+    <div class="p-5 border-b border-white/10 flex items-center justify-between">
+      <h2 id="task-dialog-title" class="text-base font-extrabold text-white">✨ Yangi Vazifa Yaratish</h2>
+      <button type="button" onclick="document.getElementById('task-dialog').close()" class="p-1.5 rounded-lg hover:bg-white/10 text-slate-300" aria-label="Oynani yopish">✕</button>
+    </div>
+    <form id="task-form" onsubmit="saveTaskForm(event)" class="p-5 space-y-4 overflow-y-auto custom-scroll">
+      <input type="hidden" id="task-edit-id" />
+
+      <div>
+        <label for="task-title-input" class="block text-xs font-semibold text-slate-300 mb-1">Vazifa nomi *</label>
+        <input id="task-title-input" type="text" required autofocus placeholder="Masalan: IELTS Writing Task 2 insho yozish" class="glass-input w-full rounded-xl px-3.5 py-2.5 text-sm" />
+      </div>
+
+      <div>
+        <label for="task-notes-input" class="block text-xs font-semibold text-slate-300 mb-1">Qisqa izoh (ixtiyoriy)</label>
+        <textarea id="task-notes-input" rows="2" placeholder="Qo'shimcha ma'lumot yoki manba..." class="glass-input w-full rounded-xl px-3.5 py-2 text-sm resize-none"></textarea>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+        <div>
+          <label for="task-category-input" class="block text-xs font-semibold text-slate-300 mb-1">Kategoriya</label>
+          <select id="task-category-input" class="glass-input w-full rounded-xl px-3 py-2.5 text-sm"></select>
+        </div>
+        <div>
+          <label for="task-priority-input" class="block text-xs font-semibold text-slate-300 mb-1">Muhimlik darajasi</label>
+          <select id="task-priority-input" class="glass-input w-full rounded-xl px-3 py-2.5 text-sm">
+            <option value="high">🔥 Yuqori</option>
+            <option value="medium" selected>⚡ O'rta</option>
+            <option value="low">🌱 Past</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
+        <div>
+          <label for="task-date-input" class="block text-xs font-semibold text-slate-300 mb-1">Deadline sanasi</label>
+          <input id="task-date-input" type="date" class="glass-input w-full rounded-xl px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label for="task-time-input" class="block text-xs font-semibold text-slate-300 mb-1">Deadline soati</label>
+          <input id="task-time-input" type="time" class="glass-input w-full rounded-xl px-3 py-2 text-sm" />
+        </div>
+        <div class="col-span-2 sm:col-span-1">
+          <label for="task-pomo-input" class="block text-xs font-semibold text-slate-300 mb-1">Pomidor maqsadi</label>
+          <select id="task-pomo-input" class="glass-input w-full rounded-xl px-3 py-2 text-sm font-mono">
+            <option value="1">🍅 1 ta</option>
+            <option value="2" selected>🍅 2 ta</option>
+            <option value="3">🍅 3 ta</option>
+            <option value="4">🍅 4 ta</option>
+            <option value="5">🍅 5 ta</option>
+            <option value="6">🍅 6 ta</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3.5 items-center">
+        <div>
+          <label for="task-status-input" class="block text-xs font-semibold text-slate-300 mb-1">Holati (Kanban)</label>
+          <select id="task-status-input" class="glass-input w-full rounded-xl px-3 py-2 text-sm">
+            <option value="todo">📋 Rejalashtirilgan</option>
+            <option value="doing">🚀 Fokusda / Bajarilmoqda</option>
+            <option value="done">✅ Bajarildi</option>
+          </select>
+        </div>
+        <label class="flex items-center gap-2.5 pt-5 cursor-pointer select-none">
+          <input id="task-pinned-input" type="checkbox" class="w-4 h-4 accent-amber-400 rounded" />
+          <span class="text-xs font-semibold text-amber-200">⭐ Muhim qilib mahkamlash (Pin)</span>
+        </label>
+      </div>
+
+      <!-- Subtasks Builder -->
+      <div class="space-y-2 pt-1">
+        <label class="block text-xs font-semibold text-slate-300">Kichik qadamlar (Subtasks / Checklist)</label>
+        <div class="flex gap-2">
+          <input id="subtask-draft-input" type="text" placeholder="Qadam qo'shish..." onkeydown="if(event.key==='Enter'){event.preventDefault();addDraftSubtask();}" class="glass-input flex-1 rounded-xl px-3 py-2 text-xs sm:text-sm" />
+          <button type="button" onclick="addDraftSubtask()" class="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-white transition">+ Qadam</button>
+        </div>
+        <div id="draft-subtasks-list" class="space-y-1.5 max-h-36 overflow-y-auto custom-scroll"></div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-white/10">
+        <button type="button" onclick="document.getElementById('task-dialog').close()" class="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-slate-200 transition">Bekor qilish</button>
+        <button type="submit" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-500 hover:brightness-110 text-xs font-bold text-white shadow-lg shadow-indigo-600/30 transition">💾 Saqlash</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ===================== MODAL 2: ADD CUSTOM CATEGORY ===================== -->
+  <dialog id="category-dialog" class="studio-dialog" closedby="any" aria-labelledby="category-dialog-title">
+    <div class="p-5 border-b border-white/10 flex items-center justify-between">
+      <h2 id="category-dialog-title" class="text-base font-extrabold text-white">🏷️ Yangi Kategoriya Qo'shish</h2>
+      <button type="button" onclick="document.getElementById('category-dialog').close()" class="p-1.5 rounded-lg hover:bg-white/10 text-slate-300" aria-label="Oynani yopish">✕</button>
+    </div>
+    <form onsubmit="saveCustomCategory(event)" class="p-5 space-y-4">
+      <div>
+        <label for="cat-name-input" class="block text-xs font-semibold text-slate-300 mb-1">Kategoriya nomi *</label>
+        <input id="cat-name-input" type="text" required autofocus placeholder="Masalan: Universitet loyihasi" class="glass-input w-full rounded-xl px-3.5 py-2.5 text-sm" />
+      </div>
+      <div class="grid grid-cols-2 gap-3.5">
+        <div>
+          <label for="cat-emoji-input" class="block text-xs font-semibold text-slate-300 mb-1">Emoji belgisi</label>
+          <input id="cat-emoji-input" type="text" value="🚀" maxlength="4" class="glass-input w-full rounded-xl px-3.5 py-2.5 text-base text-center" />
+        </div>
+        <div>
+          <label for="cat-color-input" class="block text-xs font-semibold text-slate-300 mb-1">Rangi</label>
+          <input id="cat-color-input" type="color" value="#8b5cf6" class="glass-input w-full h-11 rounded-xl p-1 cursor-pointer" />
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-1.5">
+        <button type="button" onclick="pickCatEmoji('🚀')" class="p-2 rounded-lg bg-white/5 hover:bg-white/15">🚀</button>
+        <button type="button" onclick="pickCatEmoji('🎓')" class="p-2 rounded-lg bg-white/5 hover:bg-white/15">🎓</button>
+        <button type="button" onclick="pickCatEmoji('🎵')" class="p-2 rounded-lg bg-white/5 hover:bg-white/15">🎵</button>
+        <button type="button" onclick="pickCatEmoji('📷')" class="p-2 rounded-lg bg-white/5 hover:bg-white/15">📷</button>
+        <button type="button" onclick="pickCatEmoji('✈️')" class="p-2 rounded-lg bg-white/5 hover:bg-white/15">✈️</button>
+        <button type="button" onclick="pickCatEmoji('🧩')" class="p-2 rounded-lg bg-white/5 hover:bg-white/15">🧩</button>
+        <button type="button" onclick="pickCatEmoji('🔬')" class="p-2 rounded-lg bg-white/5 hover:bg-white/15">🔬</button>
+        <button type="button" onclick="pickCatEmoji('🌱')" class="p-2 rounded-lg bg-white/5 hover:bg-white/15">🌱</button>
+      </div>
+      <div class="flex justify-end gap-2.5 pt-3 border-t border-white/10">
+        <button type="button" onclick="document.getElementById('category-dialog').close()" class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-slate-200 transition">Bekor qilish</button>
+        <button type="submit" class="px-5 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-xs font-bold text-white transition">Qo'shish</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ===================== MODAL 3: SETTINGS & DATA MANAGEMENT ===================== -->
+  <dialog id="settings-dialog" class="studio-dialog" closedby="any" aria-labelledby="settings-dialog-title">
+    <div class="p-5 border-b border-white/10 flex items-center justify-between">
+      <h2 id="settings-dialog-title" class="text-base font-extrabold text-white">⚙️ Sozlamalar va Xotira Boshqaruvi</h2>
+      <button type="button" onclick="document.getElementById('settings-dialog').close()" class="p-1.5 rounded-lg hover:bg-white/10 text-slate-300" aria-label="Oynani yopish">✕</button>
+    </div>
+    <div class="p-5 space-y-5 overflow-y-auto custom-scroll">
+      <!-- Storage Health -->
+      <div class="rounded-2xl bg-emerald-500/10 border border-emerald-400/25 p-4 space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-emerald-300 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-400"></span> LocalStorage Faol</span>
+          <span id="settings-storage-size" class="text-xs font-mono text-emerald-200">0 KB</span>
+        </div>
+        <p class="text-xs text-slate-300">Kalit: <code class="text-indigo-300">fokus3d_workspace_state_v1</code> — Hech qanday login talab qilinmaydi, barcha ma'lumotlar qurilmangizda saqlanadi.</p>
+        <div id="settings-storage-counts" class="flex flex-wrap gap-2 pt-1 text-[11px] text-slate-200"></div>
+      </div>
+
+      <!-- Export / Import / Reset -->
+      <div class="space-y-2.5">
+        <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Zaxira Nusxa (Backup)</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button type="button" autofocus onclick="exportWorkspaceJson()" class="p-3.5 rounded-2xl bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-400/35 text-left transition">
+            <p class="text-sm font-bold text-white">⬇️ JSON Eksport</p>
+            <p class="text-[11px] text-slate-300 mt-0.5">Barcha vazifa, rasm va tarixni yuklab olish</p>
+          </button>
+          <button type="button" onclick="document.getElementById('json-import-input').click()" class="p-3.5 rounded-2xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/35 text-left transition">
+            <p class="text-sm font-bold text-white">⬆️ JSON Import</p>
+            <p class="text-[11px] text-slate-300 mt-0.5">Saqlangan .json fayldan qayta tiklash</p>
+          </button>
+        </div>
+      </div>
+
+      <!-- Keyboard Shortcuts -->
+      <div class="rounded-2xl bg-white/5 border border-white/10 p-4 space-y-2">
+        <p class="text-xs font-bold text-slate-200">⌨️ Tezkor Tugmalar</p>
+        <div class="grid grid-cols-2 gap-2 text-xs text-slate-300">
+          <div><kbd class="px-1.5 py-0.5 rounded bg-white/10 font-mono text-indigo-200">N</kbd> Yangi vazifa</div>
+          <div><kbd class="px-1.5 py-0.5 rounded bg-white/10 font-mono text-indigo-200">Z</kbd> 3D Zen Rejim</div>
+          <div><kbd class="px-1.5 py-0.5 rounded bg-white/10 font-mono text-indigo-200">Space</kbd> Taymer Pauza/Start</div>
+          <div><kbd class="px-1.5 py-0.5 rounded bg-white/10 font-mono text-indigo-200">Esc</kbd> Zen / Oynani yopish</div>
+        </div>
+      </div>
+
+      <!-- Reset Demo -->
+      <div class="pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p class="text-xs font-bold text-rose-300">Boshlang'ich namunalarni tiklash</p>
+          <p class="text-[11px] text-slate-400">Hozirgi ma'lumotlar o'rniga tayyor namunalar yuklanadi</p>
+        </div>
+        <button type="button" onclick="resetDemoData()" class="px-4 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/35 border border-rose-400/35 text-rose-200 text-xs font-bold transition">🔄 Reset Demo Data</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script>
+    /* =========================================================================
+       FOKUS3D STUDIO — COMPLETE SINGLE-FILE APPLICATION
+       Storage key: 'fokus3d_workspace_state_v1'
+       ========================================================================= */
+    const STORAGE_KEY = 'fokus3d_workspace_state_v1';
+
+    // ---------- Utility Helpers ----------
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function uid(prefix = 'id') {
+      return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+    }
+
+    function getTodayISO(offsetDays = 0) {
+      const d = new Date();
+      d.setDate(d.getDate() + offsetDays);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function formatUzDate(date = new Date()) {
+      const months = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
+      const days = ['Yakshanba', 'Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba'];
+      return `${days[date.getDay()]}, ${date.getDate()}-${months[date.getMonth()]} ${date.getFullYear()}`;
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const colors = {
+        info: 'border-indigo-400/40 bg-slate-900/90 text-indigo-100',
+        success: 'border-emerald-400/45 bg-emerald-950/90 text-emerald-100',
+        warning: 'border-amber-400/45 bg-amber-950/90 text-amber-100',
+        error: 'border-rose-400/45 bg-rose-950/90 text-rose-100'
+      };
+      const el = document.createElement('div');
+      el.className = `pointer-events-auto px-4 py-3 rounded-2xl border backdrop-blur-xl shadow-2xl text-xs font-semibold transition-all duration-300 translate-y-2 opacity-0 ${colors[type] || colors.info}`;
+      el.textContent = message;
+      container.appendChild(el);
+      requestAnimationFrame(() => {
+        el.classList.remove('translate-y-2', 'opacity-0');
+      });
+      setTimeout(() => {
+        el.classList.add('translate-y-2', 'opacity-0');
+        setTimeout(() => el.remove(), 300);
+      }, 3400);
+    }
+
+    // ---------- Built-in Categories (10 default) ----------
+    const DEFAULT_CATEGORIES = [
+      { id: 'cat_study', name: "O'qish va Kurslar", emoji: '📚', color: '#6366f1', builtin: true },
+      { id: 'cat_it', name: 'Dasturlash va IT', emoji: '💻', color: '#06b6d4', builtin: true },
+      { id: 'cat_ielts', name: "Til o'rganish (IELTS)", emoji: '🌍', color: '#10b981', builtin: true },
+      { id: 'cat_work', name: 'Ish va Karyera', emoji: '💼', color: '#3b82f6', builtin: true },
+      { id: 'cat_growth', name: 'Shaxsiy rivojlanish', emoji: '🧠', color: '#a855f7', builtin: true },
+      { id: 'cat_health', name: "Sog'liq va Sport", emoji: '🏋️', color: '#22c55e', builtin: true },
+      { id: 'cat_creative', name: 'Ijod va Loyihalar', emoji: '🎨', color: '#ec4899', builtin: true },
+      { id: 'cat_finance', name: 'Moliya va Xaridlar', emoji: '💰', color: '#eab308', builtin: true },
+      { id: 'cat_home', name: "Uy va Ro'zg'or", emoji: '🏠', color: '#f97316', builtin: true },
+      { id: 'cat_urgent', name: 'Shoshilinch', emoji: '⚡', color: '#ef4444', builtin: true }
+    ];
+
+    // ---------- Bespoke Scenic SVG + 3D Gradient Built-in Wallpapers (12 total) ----------
+    function svgDataUri(svg) {
+      return `url('data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg.trim()).replace(/'/g, '%27')}')`;
+    }
+
+    const BUILTIN_WALLPAPERS = [
+      {
+        id: 'wp_lofi',
+        name: "Shinam Lo-Fi O'qish Xonasi",
+        tag: 'Lo-Fi Study',
+        bg: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900">
+          <defs>
+            <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1e1b4b"/><stop offset="55%" stop-color="#4c1d95"/><stop offset="100%" stop-color="#c2410c"/></linearGradient>
+            <radialGradient id="lamp" cx="76%" cy="56%" r="36%"><stop offset="0%" stop-color="#fbbf24" stop-opacity="0.72"/><stop offset="50%" stop-color="#f97316" stop-opacity="0.22"/><stop offset="100%" stop-color="#0f172a" stop-opacity="0"/></radialGradient>
+            <radialGradient id="moon" cx="28%" cy="26%" r="20%"><stop offset="0%" stop-color="#fef3c7" stop-opacity="0.95"/><stop offset="35%" stop-color="#fde68a" stop-opacity="0.25"/><stop offset="100%" stop-color="#4c1d95" stop-opacity="0"/></radialGradient>
+          </defs>
+          <rect width="1600" height="900" fill="url(#sky)"/>
+          <circle cx="440" cy="220" r="240" fill="url(#moon)"/>
+          <circle cx="440" cy="220" r="46" fill="#fef9c3"/>
+          <path d="M0 610 L140 520 L250 560 L410 470 L560 540 L760 440 L940 530 L1150 480 L1380 550 L1600 470 L1600 900 L0 900 Z" fill="#171430" opacity="0.88"/>
+          <rect x="0" y="650" width="1600" height="250" fill="#110e24"/>
+          <rect x="920" y="540" width="540" height="26" rx="10" fill="#2e2348"/>
+          <rect x="1150" y="340" width="14" height="200" fill="#475569"/>
+          <path d="M1110 345 L1210 345 L1185 290 L1135 290 Z" fill="#fbbf24"/>
+          <rect width="1600" height="900" fill="url(#lamp)"/>
+          <g fill="#f8fafc" opacity="0.75"><circle cx="180" cy="110" r="2"/><circle cx="620" cy="140" r="2.2"/><circle cx="880" cy="95" r="1.8"/><circle cx="1180" cy="145" r="2.4"/><circle cx="1410" cy="110" r="2"/><circle cx="310" cy="80" r="1.5"/></g>
+        </svg>`)
+      },
+      {
+        id: 'wp_sakura',
+        name: "Tog' Ko'li va Sakura Tongi",
+        tag: 'Tabiat',
+        bg: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900">
+          <defs>
+            <linearGradient id="s1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1e1b4b"/><stop offset="42%" stop-color="#be185d"/><stop offset="72%" stop-color="#fb7185"/><stop offset="100%" stop-color="#fde68a"/></linearGradient>
+            <linearGradient id="lake" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f472b6" stop-opacity="0.55"/><stop offset="100%" stop-color="#0f172a"/></linearGradient>
+          </defs>
+          <rect width="1600" height="900" fill="url(#s1)"/>
+          <circle cx="820" cy="490" r="120" fill="#fef3c7" opacity="0.88"/>
+          <path d="M0 570 L280 390 L520 510 L820 290 L1110 500 L1340 370 L1600 540 L1600 620 L0 620 Z" fill="#311042" opacity="0.86"/>
+          <path d="M745 352 L820 290 L895 352 L855 370 L820 345 L785 370 Z" fill="#fff1f2" opacity="0.85"/>
+          <rect y="585" width="1600" height="315" fill="url(#lake)"/>
+          <ellipse cx="820" cy="650" rx="220" ry="20" fill="#fde68a" opacity="0.32"/>
+          <path d="M-20 120 Q240 180 430 90" stroke="#4a154b" stroke-width="18" fill="none"/>
+          <g fill="#fbcfe8" opacity="0.92"><circle cx="120" cy="145" r="34"/><circle cx="190" cy="160" r="42"/><circle cx="270" cy="130" r="36"/><circle cx="360" cy="110" r="30"/><circle cx="70" cy="115" r="28"/></g>
+          <g fill="#f9a8d4" opacity="0.85"><circle cx="1430" cy="150" r="45"/><circle cx="1510" cy="120" r="52"/><circle cx="1360" cy="110" r="32"/></g>
+        </svg>`)
+      },
+      {
+        id: 'wp_cosmos',
+        name: 'Koinot Observatoriyasi',
+        tag: 'Koinot',
+        bg: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900">
+          <defs>
+            <radialGradient id="neb1" cx="32%" cy="32%" r="55%"><stop offset="0%" stop-color="#6366f1" stop-opacity="0.72"/><stop offset="48%" stop-color="#3b0764" stop-opacity="0.45"/><stop offset="100%" stop-color="#020617"/></radialGradient>
+            <radialGradient id="neb2" cx="76%" cy="28%" r="42%"><stop offset="0%" stop-color="#06b6d4" stop-opacity="0.52"/><stop offset="60%" stop-color="#0f172a" stop-opacity="0"/></radialGradient>
+          </defs>
+          <rect width="1600" height="900" fill="#020617"/>
+          <rect width="1600" height="900" fill="url(#neb1)"/>
+          <rect width="1600" height="900" fill="url(#neb2)"/>
+          <path d="M0 720 Q420 620 820 710 T1600 660 L1600 900 L0 900 Z" fill="#060918"/>
+          <path d="M1110 660 A90 90 0 0 1 1290 660 Z" fill="#111827"/>
+          <rect x="1095" y="655" width="210" height="65" fill="#0b1120"/>
+          <line x1="1200" y1="575" x2="1080" y2="480" stroke="#38bdf8" stroke-width="5" opacity="0.45"/>
+          <g fill="#ffffff"><circle cx="210" cy="130" r="2.2"/><circle cx="430" cy="95" r="1.6"/><circle cx="660" cy="180" r="2.8"/><circle cx="940" cy="110" r="2"/><circle cx="1290" cy="150" r="2.5"/><circle cx="1470" cy="210" r="1.8"/><circle cx="350" cy="310" r="2"/><circle cx="790" cy="270" r="1.5"/><circle cx="1090" cy="250" r="2.2"/></g>
+        </svg>`)
+      },
+      {
+        id: 'wp_cyberpunk',
+        name: 'Kiberpank Tungi Shahar Balkoni',
+        tag: 'Kiberpank',
+        bg: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900">
+          <defs>
+            <linearGradient id="cbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#09061a"/><stop offset="50%" stop-color="#1e1145"/><stop offset="100%" stop-color="#0a192f"/></linearGradient>
+            <radialGradient id="pinkg" cx="24%" cy="58%" r="38%"><stop offset="0%" stop-color="#ec4899" stop-opacity="0.65"/><stop offset="100%" stop-color="#09061a" stop-opacity="0"/></radialGradient>
+            <radialGradient id="cyang" cx="78%" cy="48%" r="40%"><stop offset="0%" stop-color="#06b6d4" stop-opacity="0.6"/><stop offset="100%" stop-color="#09061a" stop-opacity="0"/></radialGradient>
+          </defs>
+          <rect width="1600" height="900" fill="url(#cbg)"/>
+          <rect width="1600" height="900" fill="url(#pinkg)"/>
+          <rect width="1600" height="900" fill="url(#cyang)"/>
+          <g fill="#0b1024">
+            <rect x="60" y="340" width="130" height="560"/><rect x="220" y="250" width="160" height="650"/>
+            <rect x="420" y="380" width="140" height="520"/><rect x="600" y="200" width="180" height="700"/>
+            <rect x="830" y="310" width="150" height="590"/><rect x="1020" y="230" width="190" height="670"/>
+            <rect x="1250" y="350" width="140" height="550"/><rect x="1420" y="270" width="140" height="630"/>
+          </g>
+          <g opacity="0.8">
+            <rect x="250" y="290" width="90" height="10" fill="#22d3ee"/><rect x="640" y="250" width="100" height="12" fill="#f472b6"/>
+            <rect x="1060" y="280" width="110" height="10" fill="#38bdf8"/><rect x="860" y="360" width="80" height="10" fill="#c084fc"/>
+            <rect x="450" y="420" width="75" height="8" fill="#fb7185"/>
+          </g>
+          <rect y="790" width="1600" height="14" fill="#22d3ee" opacity="0.5"/>
+          <rect y="804" width="1600" height="96" fill="#050814"/>
+        </svg>`)
+      },
+      {
+        id: 'wp_tropical',
+        name: 'Tropik Sohil Quyosh Botishi',
+        tag: 'Sohil',
+        bg: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900">
+          <defs>
+            <linearGradient id="ts" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1e1b4b"/><stop offset="38%" stop-color="#db2777"/><stop offset="65%" stop-color="#f97316"/><stop offset="100%" stop-color="#fde047"/></linearGradient>
+            <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#fb923c"/><stop offset="45%" stop-color="#4c1d95"/><stop offset="100%" stop-color="#090d1f"/></linearGradient>
+          </defs>
+          <rect width="1600" height="560" fill="url(#ts)"/>
+          <circle cx="800" cy="520" r="145" fill="#fef08a" opacity="0.92"/>
+          <rect y="540" width="1600" height="360" fill="url(#sea)"/>
+          <ellipse cx="800" cy="610" rx="280" ry="18" fill="#fef08a" opacity="0.45"/>
+          <ellipse cx="800" cy="675" rx="190" ry="12" fill="#fdba74" opacity="0.35"/>
+          <path d="M0 900 Q190 660 220 420 Q120 450 40 500 Q120 390 225 385 Q160 310 90 290 Q210 290 265 365 Q340 280 430 300 Q340 360 280 410 Q380 430 430 490 Q310 470 250 440 Q210 670 110 900 Z" fill="#090817"/>
+          <path d="M1600 900 Q1430 670 1390 450 Q1490 480 1560 520 Q1470 420 1380 415 Q1440 340 1520 330 Q1400 320 1345 400 Q1260 330 1190 360 Q1280 405 1335 445 Q1230 480 1190 540 Q1300 505 1365 470 Q1410 680 1510 900 Z" fill="#090817"/>
+        </svg>`)
+      },
+      {
+        id: 'wp_aurora',
+        name: "Shimoliy Yog'du (Aurora)",
+        tag: 'Tabiat',
+        bg: svgDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900">
+          <defs>
+            <linearGradient id="abg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#020617"/><stop offset="60%" stop-color="#064e3b"/><stop offset="100%" stop-color="#0f172a"/></linearGradient>
+            <linearGradient id="aur" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#34d399" stop-opacity="0"/><stop offset="30%" stop-color="#2dd4bf" stop-opacity="0.72"/><stop offset="65%" stop-color="#a855f7" stop-opacity="0.65"/><stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/></linearGradient>
+          </defs>
+          <rect width="1600" height="900" fill="url(#abg)"/>
+          <path d="M-50 380 Q320 110 740 270 T1650 180 L1650 480 Q1180 420 760 520 T-50 560 Z" fill="url(#aur)"/>
+          <path d="M0 700 L290 520 L580 680 L910 470 L1250 660 L1470 540 L1600 640 L1600 900 L0 900 Z" fill="#040b16"/>
+        </svg>`)
+      },
+      {
+        id: 'wp_tokyo_rain',
+        name: "Yomg'irli Tokio Kechasi",
+        tag: 'Atmosfera',
+        bg: 'radial-gradient(circle at 22% 30%, rgba(244,63,94,0.45), transparent 45%), radial-gradient(circle at 78% 68%, rgba(56,189,248,0.45), transparent 48%), linear-gradient(135deg, #090d1f 0%, #1e1b4b 52%, #0f172a 100%)'
+      },
+      {
+        id: 'wp_neon_mesh',
+        name: 'Yalpiz va Binafsha 3D Neon',
+        tag: '3D Gradiyent',
+        bg: 'radial-gradient(at 14% 18%, #6366f1 0px, transparent 52%), radial-gradient(at 86% 24%, #ec4899 0px, transparent 50%), radial-gradient(at 62% 84%, #14b8a6 0px, transparent 54%), linear-gradient(160deg, #090c1a 0%, #111827 100%)'
+      },
+      {
+        id: 'wp_emerald_gold',
+        name: 'Zumrad va Oltin Fokus',
+        tag: '3D Gradiyent',
+        bg: 'radial-gradient(at 18% 22%, rgba(16,185,129,0.52), transparent 50%), radial-gradient(at 82% 76%, rgba(245,158,11,0.42), transparent 52%), linear-gradient(145deg, #041214 0%, #091d22 50%, #0b1120 100%)'
+      },
+      {
+        id: 'wp_library',
+        name: 'Tungi Kutubxona Atmosferasi',
+        tag: 'Lo-Fi Study',
+        bg: 'radial-gradient(circle at 72% 28%, rgba(251,146,60,0.45), transparent 46%), radial-gradient(circle at 24% 80%, rgba(168,85,247,0.32), transparent 50%), linear-gradient(155deg, #1a0f0a 0%, #271711 45%, #0f1021 100%)'
+      },
+      {
+        id: 'wp_mars',
+        name: 'Mars Kanyoni Quyosh Botishi',
+        tag: 'Koinot',
+        bg: 'radial-gradient(circle at 50% 35%, rgba(251,113,133,0.52), transparent 50%), radial-gradient(circle at 80% 80%, rgba(234,88,12,0.45), transparent 48%), linear-gradient(170deg, #1b0b1a 0%, #45121e 48%, #0f0714 100%)'
+      },
+      {
+        id: 'wp_obsidian',
+        name: 'Minimalist Qora Obsidiyan',
+        tag: 'Minimal',
+        bg: 'radial-gradient(at 25% 15%, rgba(99,102,241,0.28), transparent 48%), radial-gradient(at 80% 85%, rgba(56,189,248,0.22), transparent 48%), linear-gradient(140deg, #030712 0%, #0f172a 50%, #020617 100%)'
+      }
+    ];
+
+    const MOTIVATION_QUOTES = [
+      "«Kichik qadamlar har kuni takrorlansa, eng katta maqsadlarga olib boradi.»",
+      "«Fokus — bu minglab yaxshi g'oyalarga 'yo'q' deb, eng muhimiga 'ha' deyishdir.»",
+      "«Bugun qilgan 25 daqiqalik chuqur mehnatingiz ertangi muvaffaqiyatingiz poydevoridir.»",
+      "«Intizom — kayfiyat bo'lmaganda ham boshlagan ishni oxiriga yetkazishdir.»",
+      "«Vaqtni boshqara olgan inson o'z kelajagini ham boshqara oladi.»",
+      "«Mukammallikni kutmang — hozir boshlang va jarayonda mukammallashtiring.»",
+      "«Har bir bajarilgan 🍅 pomidor — o'zingiz ustingizdagi kichik g'alabadir!»"
+    ];
+
+    // ---------- Default Demo State ----------
+    function createDemoState() {
+      const today = getTodayISO(0);
+      const tomorrow = getTodayISO(1);
+      const yesterday = getTodayISO(-1);
+      const inThreeDays = getTodayISO(3);
+      return {
+        version: 1,
+        activeSection: 'tasks',
+        taskFilter: 'all',
+        categoryFilter: null,
+        taskViewMode: 'grid',
+        taskSort: 'deadline',
+        searchQuery: '',
+        mood: { date: today, value: 'energetic' },
+        quoteIndex: 0,
+        threeEffect: 'crystals',
+        activeWallpaperId: 'wp_lofi',
+        wallpaperDim: 45,
+        wallpaperBlur: 4,
+        customWallpapers: [],
+        categories: JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)),
+        tasks: [
+          {
+            id: uid('task'),
+            title: "IELTS Reading Practice Test #4 ni to'liq ishlash",
+            notes: '3 ta passage, 60 daqiqa vaqt chegarasi bilan.',
+            categoryId: 'cat_ielts',
+            deadlineDate: today,
+            deadlineTime: '20:30',
+            priority: 'high',
+            targetPomodoros: 3,
+            completedPomodoros: 1,
+            status: 'doing',
+            pinned: true,
+            subtasks: [
+              { id: uid('sub'), text: 'Passage 1 va 2 ni tahlil qilish', done: true },
+              { id: uid('sub'), text: 'Passage 3 savollarini yechish', done: false },
+              { id: uid('sub'), text: "Notanish so'zlarni lug'atga yozish", done: false }
+            ],
+            createdAt: Date.now() - 3600000 * 5
+          },
+          {
+            id: uid('task'),
+            title: 'JavaScript Async/Await va API integratsiya mashqlari',
+            notes: 'Fetch API xatolarini try/catch bilan ushlash.',
+            categoryId: 'cat_it',
+            deadlineDate: today,
+            deadlineTime: '22:00',
+            priority: 'high',
+            targetPomodoros: 4,
+            completedPomodoros: 2,
+            status: 'todo',
+            pinned: true,
+            subtasks: [
+              { id: uid('sub'), text: 'Promise.all misolini yozish', done: true },
+              { id: uid('sub'), text: 'Mini ob-havo ilovasini ulash', done: false }
+            ],
+            createdAt: Date.now() - 3600000 * 4
+          },
+          {
+            id: uid('task'),
+            title: 'Matematika: Hosila va Integral mavzusidan 15 ta masala',
+            notes: "O'quv markazi uy vazifasi.",
+            categoryId: 'cat_study',
+            deadlineDate: tomorrow,
+            deadlineTime: '14:00',
+            priority: 'medium',
+            targetPomodoros: 3,
+            completedPomodoros: 0,
+            status: 'todo',
+            pinned: false,
+            subtasks: [
+              { id: uid('sub'), text: 'Formulalarni takrorlash', done: false },
+              { id: uid('sub'), text: '1-15 masalalarni daftarga yechish', done: false }
+            ],
+            createdAt: Date.now() - 3600000 * 3
+          },
+          {
+            id: uid('task'),
+            title: "Kechki 30 daqiqalik yugurish va cho'zilish mashqlari",
+            notes: 'Parkda yengil tempda.',
+            categoryId: 'cat_health',
+            deadlineDate: today,
+            deadlineTime: '19:00',
+            priority: 'medium',
+            targetPomodoros: 1,
+            completedPomodoros: 0,
+            status: 'todo',
+            pinned: false,
+            subtasks: [],
+            createdAt: Date.now() - 3600000 * 2
+          },
+          {
+            id: uid('task'),
+            title: 'Portfolio dizayn maketini yangilash (3D kartalar)',
+            notes: 'Figma va CSS glassmorphism effektlari.',
+            categoryId: 'cat_creative',
+            deadlineDate: inThreeDays,
+            deadlineTime: '18:00',
+            priority: 'low',
+            targetPomodoros: 2,
+            completedPomodoros: 2,
+            status: 'done',
+            pinned: false,
+            subtasks: [
+              { id: uid('sub'), text: 'Ranglar palitrasini tanlash', done: true },
+              { id: uid('sub'), text: 'Hero bo\'limini eksport qilish', done: true }
+            ],
+            createdAt: Date.now() - 3600000 * 8
+          },
+          {
+            id: uid('task'),
+            title: "Oylik byudjet va xarajatlarni ko'rib chiqish",
+            notes: 'Kechagi rejalashtirilgan ish — tezda yakunlash kerak!',
+            categoryId: 'cat_finance',
+            deadlineDate: yesterday,
+            deadlineTime: '18:00',
+            priority: 'high',
+            targetPomodoros: 1,
+            completedPomodoros: 0,
+            status: 'todo',
+            pinned: false,
+            subtasks: [],
+            createdAt: Date.now() - 3600000 * 28
+          }
+        ],
+        studyBlocks: [
+          { id: uid('sb'), subject: 'Matematika — Integral mashqlar', targetPomos: 3, donePomos: 1 },
+          { id: uid('sb'), subject: 'IELTS Vocabulary & Listening', targetPomos: 2, donePomos: 1 },
+          { id: uid('sb'), subject: 'Frontend & Three.js Amaliyot', targetPomos: 4, donePomos: 2 }
+        ],
+        studyHistory: [
+          { id: uid('sh'), date: today, time: '09:45', title: 'IELTS Reading Practice Test #4', minutes: 25, mode: 'Pomidor' },
+          { id: uid('sh'), date: today, time: '11:20', title: 'JavaScript Async/Await mashqlari', minutes: 50, mode: 'Chuqur Fokus' }
+        ],
+        habits: [
+          { id: uid('hab'), emoji: '💧', name: '2 litr toza suv ichish', history: [getTodayISO(-2), yesterday, today] },
+          { id: uid('hab'), emoji: '📖', name: "20 daqiqa badiiy yoki ilmiy kitob o'qish", history: [yesterday, today] },
+          { id: uid('hab'), emoji: '🇬🇧', name: "15 ta yangi inglizcha so'z yodlash", history: [getTodayISO(-3), getTodayISO(-2), yesterday] },
+          { id: uid('hab'), emoji: '🏃', name: '30 daqiqa jismoniy mashq / piyoda yurish', history: [yesterday] }
+        ],
+        pomodoro: {
+          mode: 'pomodoro',
+          customMinutes: 35,
+          linkedTarget: '',
+          ambientSound: 'off',
+          ambientVolume: 45
+        }
+      };
+    }
+
+    // ---------- State Load / Save (Protected with try/catch) ----------
+    let state = loadState();
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return createDemoState();
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return createDemoState();
+        const base = createDemoState();
+        return {
+          ...base,
+          ...parsed,
+          categories: Array.isArray(parsed.categories) && parsed.categories.length ? parsed.categories : base.categories,
+          tasks: Array.isArray(parsed.tasks) ? parsed.tasks : base.tasks,
+          customWallpapers: Array.isArray(parsed.customWallpapers) ? parsed.customWallpapers : [],
+          studyBlocks: Array.isArray(parsed.studyBlocks) ? parsed.studyBlocks : base.studyBlocks,
+          studyHistory: Array.isArray(parsed.studyHistory) ? parsed.studyHistory : [],
+          habits: Array.isArray(parsed.habits) ? parsed.habits : base.habits,
+          pomodoro: { ...base.pomodoro, ...(parsed.pomodoro || {}) },
+          mood: parsed.mood || base.mood
+        };
+      } catch (err) {
+        console.warn('LocalStorage load error:', err);
+        return createDemoState();
+      }
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        flashStorageIndicator();
+        return true;
+      } catch (err) {
+        console.error('LocalStorage save error:', err);
+        showToast("⚠️ Xotira to'lib qoldi! Ba'zi yuklangan rasmlarni o'chiring.", 'error');
+        return false;
+      }
+    }
+
+    let storageFlashTimeout = null;
+    function flashStorageIndicator() {
+      const el = document.getElementById('storage-indicator');
+      if (!el) return;
+      el.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>Saqlandi ✓</span>`;
+      clearTimeout(storageFlashTimeout);
+      storageFlashTimeout = setTimeout(() => {
+        el.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span><span>LocalStorage Faol</span>`;
+      }, 1200);
+    }
+
+    // ---------- 3D Tilt Micro-interaction ----------
+    function bindTiltCards() {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      document.querySelectorAll('.tilt-card').forEach(card => {
+        if (card.dataset.tiltBound) return;
+        card.dataset.tiltBound = '1';
+        card.addEventListener('pointermove', (e) => {
+          const rect = card.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          const px = x / rect.width;
+          const py = y / rect.height;
+          const rotateY = (px - 0.5) * 9;
+          const rotateX = (0.5 - py) * 9;
+          card.style.setProperty('--mx', `${x}px`);
+          card.style.setProperty('--my', `${y}px`);
+          card.style.transform = `perspective(950px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg) translateY(-2px)`;
+        });
+        card.addEventListener('pointerleave', () => {
+          card.style.transform = 'perspective(950px) rotateX(0deg) rotateY(0deg) translateY(0)';
+        });
+      });
+    }
+
+    // ---------- Dialog Light-Dismiss Fallback (per modern-web-guidance) ----------
+    function setupDialogLightDismissFallback() {
+      if ('closedBy' in HTMLDialogElement.prototype) return;
+      const outside = (e, dialog) => {
+        const r = dialog.getBoundingClientRect();
+        return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+      };
+      document.querySelectorAll('dialog[closedby="any"]').forEach(dialog => {
+        let pressedOutside = false;
+        dialog.addEventListener('pointerdown', (e) => {
+          pressedOutside = outside(e, dialog);
+        });
+        dialog.addEventListener('pointerup', (e) => {
+          if (pressedOutside && outside(e, dialog)) dialog.close();
+        });
+      });
+    }
+
+    // ---------- Wallpaper Engine & Canvas Image Compression ----------
+    function getAllWallpapers() {
+      return [...state.customWallpapers, ...BUILTIN_WALLPAPERS];
+    }
+
+    function applyWallpaperVisuals() {
+      const layer = document.getElementById('wallpaper-layer');
+      const all = getAllWallpapers();
+      const active = all.find(w => w.id === state.activeWallpaperId) || BUILTIN_WALLPAPERS[0];
+
+      if (active.dataUrl) {
+        layer.style.backgroundImage = `url('${active.dataUrl}')`;
+      } else if (active.url) {
+        const safeUrl = active.url.replace(/['"()\\\n\r]/g, encodeURIComponent);
+        layer.style.backgroundImage = `url('${safeUrl}')`;
+      } else {
+        layer.style.backgroundImage = active.bg;
+      }
+
+      document.documentElement.style.setProperty('--bg-dim', (state.wallpaperDim / 100).toFixed(2));
+      document.documentElement.style.setProperty('--bg-blur', `${state.wallpaperBlur}px`);
+
+      const dimSlider = document.getElementById('dim-slider');
+      const blurSlider = document.getElementById('blur-slider');
+      if (dimSlider) dimSlider.value = state.wallpaperDim;
+      if (blurSlider) blurSlider.value = state.wallpaperBlur;
+      const dimLabel = document.getElementById('dim-value-label');
+      const blurLabel = document.getElementById('blur-value-label');
+      if (dimLabel) dimLabel.textContent = `${state.wallpaperDim}%`;
+      if (blurLabel) blurLabel.textContent = `${state.wallpaperBlur}px`;
+    }
+
+    function setWallpaper(id) {
+      state.activeWallpaperId = id;
+      saveState();
+      applyWallpaperVisuals();
+      renderWallpaperGallery();
+    }
+
+    function setWallpaperDim(val) {
+      state.wallpaperDim = Number(val);
+      applyWallpaperVisuals();
+      saveState();
+    }
+
+    function setWallpaperBlur(val) {
+      state.wallpaperBlur = Number(val);
+      applyWallpaperVisuals();
+      saveState();
+    }
+
+    function triggerQuickWallpaperUpload() {
+      document.getElementById('quick-wallpaper-input').click();
+    }
+
+    function compressImageFile(file, maxW = 1440, maxH = 900, quality = 0.82) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('Faylni o\'qishda xatolik'));
+        reader.onload = (ev) => {
+          const img = new Image();
+          img.onerror = () => reject(new Error('Rasm formati noto\'g\'ri'));
+          img.onload = () => {
+            let { width, height } = img;
+            const ratio = Math.min(maxW / width, maxH / height, 1);
+            width = Math.round(width * ratio);
+            height = Math.round(height * ratio);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            const dataUrl = canvas.toDataURL('image/jpeg', quality);
+            resolve(dataUrl);
+          };
+          img.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    document.getElementById('quick-wallpaper-input').addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
+      let lastId = null;
+      let addedCount = 0;
+
+      for (const file of files) {
+        if (!file.type.startsWith('image/')) continue;
+        try {
+          const dataUrl = await compressImageFile(file, 1440, 900, 0.82);
+          const cleanName = file.name.replace(/\.[^.]+$/, '').slice(0, 32) || 'Shaxsiy rasm';
+          const wp = {
+            id: uid('cwp'),
+            name: cleanName,
+            tag: 'Shaxsiy galereya',
+            dataUrl,
+            custom: true
+          };
+          state.customWallpapers.unshift(wp);
+          lastId = wp.id;
+          addedCount++;
+        } catch (err) {
+          showToast(`❌ ${file.name}: yuklashda xatolik`, 'error');
+        }
+      }
+
+      e.target.value = '';
+      if (addedCount > 0 && lastId) {
+        state.activeWallpaperId = lastId;
+        if (saveState()) {
+          applyWallpaperVisuals();
+          renderWallpaperGallery();
+          showToast(`📸 ${addedCount} ta rasm siqilib galereyaga qo'shildi va fon sifatida o'rnatildi!`, 'success');
+        } else {
+          // rollback if storage full
+          state.customWallpapers.splice(0, addedCount);
+          renderWallpaperGallery();
+        }
+      }
+    });
+
+    function addWallpaperByUrl(e) {
+      e.preventDefault();
+      const urlInput = document.getElementById('wp-url-input');
+      const nameInput = document.getElementById('wp-name-input');
+      const rawUrl = urlInput.value.trim();
+      if (!/^https?:\/\//i.test(rawUrl)) {
+        showToast('Iltimos, to\'g\'ri http:// yoki https:// rasm manzilini kiriting.', 'warning');
+        return;
+      }
+      const wp = {
+        id: uid('uwp'),
+        name: nameInput.value.trim() || 'Tashqi fon rasmi',
+        tag: 'URL Rasm',
+        url: rawUrl,
+        custom: true
+      };
+      state.customWallpapers.unshift(wp);
+      state.activeWallpaperId = wp.id;
+      saveState();
+      applyWallpaperVisuals();
+      renderWallpaperGallery();
+      urlInput.value = '';
+      nameInput.value = '';
+      showToast('🔗 Tashqi rasm fonga o\'rnatildi va saqlandi!', 'success');
+    }
+
+    function deleteCustomWallpaper(id, event) {
+      event.stopPropagation();
+      state.customWallpapers = state.customWallpapers.filter(w => w.id !== id);
+      if (state.activeWallpaperId === id) {
+        state.activeWallpaperId = BUILTIN_WALLPAPERS[0].id;
+      }
+      saveState();
+      applyWallpaperVisuals();
+      renderWallpaperGallery();
+      showToast("Shaxsiy rasm o'chirildi.", 'info');
+    }
+
+    function cycleWallpaperQuick() {
+      const all = getAllWallpapers();
+      const idx = all.findIndex(w => w.id === state.activeWallpaperId);
+      const next = all[(idx + 1) % all.length];
+      setWallpaper(next.id);
+      showToast(`🖼️ Fon: ${next.name}`, 'info');
+    }
+
+    function renderWallpaperGallery() {
+      const grid = document.getElementById('wallpaper-gallery-grid');
+      const countEl = document.getElementById('custom-wp-count');
+      if (!grid) return;
+
+      countEl.textContent = state.customWallpapers.length
+        ? `📸 ${state.customWallpapers.length} ta shaxsiy rasm saqlangan`
+        : 'Shaxsiy rasm hali yuklanmagan';
+
+      // Special Upload Card FIRST
+      let html = `
+        <button type="button" onclick="triggerQuickWallpaperUpload()" class="glass-card tilt-card group rounded-2xl h-44 p-5 border-2 border-dashed border-cyan-400/50 hover:border-cyan-300 bg-cyan-950/25 flex flex-col items-center justify-center text-center gap-2.5 cursor-pointer">
+          <div class="w-12 h-12 rounded-2xl bg-cyan-500/25 border border-cyan-300/40 flex items-center justify-center text-2xl group-hover:scale-110 transition">📸</div>
+          <div>
+            <p class="text-xs font-extrabold text-cyan-100">+ O'z galereyangizdan rasm qo'shish</p>
+            <p class="text-[11px] text-slate-300 mt-0.5">Qurilmadan bitta yoki bir nechta rasm tanlang</p>
+          </div>
+        </button>
+      `;
+
+      const all = getAllWallpapers();
+      for (const wp of all) {
+        const isActive = wp.id === state.activeWallpaperId;
+        const safeUrl = wp.url ? wp.url.replace(/['"()\\\n\r]/g, encodeURIComponent) : '';
+        const previewStyle = wp.dataUrl
+          ? `background-image: url('${wp.dataUrl}');`
+          : wp.url
+            ? `background-image: url('${safeUrl}');`
+            : `background-image: ${wp.bg};`;
+
+        html += `
+          <div onclick="setWallpaper('${escapeHtml(wp.id)}')" class="glass-card tilt-card group rounded-2xl h-44 cursor-pointer relative overflow-hidden ${isActive ? 'ring-2 ring-indigo-400 border-indigo-400' : ''}">
+            <div class="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-105" style="${previewStyle}"></div>
+            <div class="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/25 to-transparent"></div>
+            <div class="relative z-10 h-full p-3.5 flex flex-col justify-between">
+              <div class="flex items-center justify-between gap-2">
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-950/65 backdrop-blur-md border border-white/15 text-slate-200">${escapeHtml(wp.tag || 'Fon')}</span>
+                <div class="flex items-center gap-1.5">
+                  ${isActive ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-500 text-white shadow">✓ Faol</span>' : ''}
+                  ${wp.custom ? `<button type="button" onclick="deleteCustomWallpaper('${escapeHtml(wp.id)}', event)" class="w-6 h-6 rounded-full bg-rose-500/80 hover:bg-rose-500 text-white text-xs flex items-center justify-center" title="Rasmni o'chirish" aria-label="Rasmni o'chirish">✕</button>` : ''}
+                </div>
+              </div>
+              <p class="text-xs font-extrabold text-white drop-shadow">${escapeHtml(wp.name)}</p>
+            </div>
+          </div>
+        `;
+      }
+
+      grid.innerHTML = html;
+      bindTiltCards();
+    }
+
+    // ---------- Three.js Interactive 3D Background Engine ----------
+    const ThreeEngine = {
+      scene: null,
+      camera: null,
+      renderer: null,
+      group: null,
+      items: [],
+      mode: 'crystals',
+      rafId: null,
+      mouseX: 0,
+      mouseY: 0,
+      targetX: 0,
+      targetY: 0,
+      initialized: false,
+
+      init() {
+        if (this.initialized || typeof THREE === 'undefined') return;
+        const canvas = document.getElementById('three-canvas');
+        if (!canvas) return;
+        try {
+          this.renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'high-performance' });
+          this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+          this.renderer.setSize(window.innerWidth, window.innerHeight);
+
+          this.scene = new THREE.Scene();
+          this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+          this.camera.position.z = 36;
+
+          const ambient = new THREE.AmbientLight(0xffffff, 0.75);
+          this.scene.add(ambient);
+          const p1 = new THREE.PointLight(0x818cf8, 2.2, 120);
+          p1.position.set(18, 16, 24);
+          this.scene.add(p1);
+          const p2 = new THREE.PointLight(0x38bdf8, 1.8, 120);
+          p2.position.set(-20, -14, 18);
+          this.scene.add(p2);
+
+          window.addEventListener('resize', () => {
+            if (!this.renderer || !this.camera) return;
+            this.camera.aspect = window.innerWidth / window.innerHeight;
+            this.camera.updateProjectionMatrix();
+            this.renderer.setSize(window.innerWidth, window.innerHeight);
+          });
+
+          window.addEventListener('pointermove', (e) => {
+            this.targetX = (e.clientX / window.innerWidth - 0.5) * 2;
+            this.targetY = (e.clientY / window.innerHeight - 0.5) * 2;
+          });
+
+          this.initialized = true;
+          this.setMode(state.threeEffect || 'crystals');
+        } catch (err) {
+          console.warn('WebGL unavailable:', err);
+        }
+      },
+
+      clearGroup() {
+        if (this.group && this.scene) {
+          this.scene.remove(this.group);
+          this.group.traverse(obj => {
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) {
+              if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+              else obj.material.dispose();
+            }
+          });
+        }
+        this.group = new THREE.Group();
+        this.items = [];
+        if (this.scene) this.scene.add(this.group);
+      },
+
+      setMode(mode) {
+        this.mode = mode;
+        if (!this.initialized) return;
+        if (this.rafId) {
+          cancelAnimationFrame(this.rafId);
+          this.rafId = null;
+        }
+        this.clearGroup();
+
+        if (mode === 'off') {
+          this.renderer.clear();
+          return;
+        }
+
+        if (mode === 'crystals') {
+          const palette = [0x818cf8, 0x38bdf8, 0xc084fc, 0x2dd4bf, 0xf472b6];
+          for (let i = 0; i < 28; i++) {
+            const size = 0.9 + Math.random() * 2.2;
+            const geo = i % 2 === 0 ? new THREE.OctahedronGeometry(size, 0) : new THREE.IcosahedronGeometry(size * 0.85, 0);
+            const mat = new THREE.MeshPhongMaterial({
+              color: palette[i % palette.length],
+              transparent: true,
+              opacity: 0.32 + Math.random() * 0.25,
+              shininess: 95,
+              flatShading: true
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            const wire = new THREE.LineSegments(
+              new THREE.EdgesGeometry(geo),
+              new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.28 })
+            );
+            mesh.add(wire);
+            mesh.position.set((Math.random() - 0.5) * 68, (Math.random() - 0.5) * 42, (Math.random() - 0.5) * 32);
+            mesh.userData = {
+              rx: (Math.random() - 0.5) * 0.012,
+              ry: (Math.random() - 0.5) * 0.015,
+              floatAmp: 0.35 + Math.random() * 0.6,
+              floatSpeed: 0.0006 + Math.random() * 0.0008,
+              baseY: mesh.position.y,
+              phase: Math.random() * Math.PI * 2
+            };
+            this.group.add(mesh);
+            this.items.push(mesh);
+          }
+        } else if (mode === 'stars') {
+          const count = 950;
+          const positions = new Float32Array(count * 3);
+          const colors = new Float32Array(count * 3);
+          const c = new THREE.Color();
+          for (let i = 0; i < count; i++) {
+            positions[i * 3] = (Math.random() - 0.5) * 130;
+            positions[i * 3 + 1] = (Math.random() - 0.5) * 85;
+            positions[i * 3 + 2] = (Math.random() - 0.5) * 90;
+            c.setHSL(0.55 + Math.random() * 0.25, 0.8, 0.72 + Math.random() * 0.25);
+            colors[i * 3] = c.r;
+            colors[i * 3 + 1] = c.g;
+            colors[i * 3 + 2] = c.b;
+          }
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+          geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+          const mat = new THREE.PointsMaterial({ size: 0.55, vertexColors: true, transparent: true, opacity: 0.9 });
+          const points = new THREE.Points(geo, mat);
+          this.group.add(points);
+          this.items.push(points);
+        } else if (mode === 'sakura') {
+          const shape = new THREE.Shape();
+          shape.moveTo(0, 0);
+          shape.bezierCurveTo(0.45, 0.45, 0.4, 1.15, 0, 1.35);
+          shape.bezierCurveTo(-0.4, 1.15, -0.45, 0.45, 0, 0);
+          const geo = new THREE.ShapeGeometry(shape);
+          const tones = [0xfbcfe8, 0xf9a8d4, 0xf472b6, 0xfff1f2];
+          for (let i = 0; i < 75; i++) {
+            const mat = new THREE.MeshBasicMaterial({
+              color: tones[i % tones.length],
+              side: THREE.DoubleSide,
+              transparent: true,
+              opacity: 0.65 + Math.random() * 0.3
+            });
+            const petal = new THREE.Mesh(geo, mat);
+            const sc = 0.45 + Math.random() * 0.65;
+            petal.scale.set(sc, sc, sc);
+            petal.position.set((Math.random() - 0.5) * 72, (Math.random() - 0.5) * 48, (Math.random() - 0.5) * 30);
+            petal.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+            petal.userData = {
+              vy: 0.04 + Math.random() * 0.06,
+              vx: (Math.random() - 0.35) * 0.035,
+              rx: (Math.random() - 0.5) * 0.03,
+              ry: (Math.random() - 0.5) * 0.03,
+              sway: Math.random() * Math.PI * 2
+            };
+            this.group.add(petal);
+            this.items.push(petal);
+          }
+        } else if (mode === 'rain') {
+          const count = 420;
+          const positions = new Float32Array(count * 6);
+          for (let i = 0; i < count; i++) {
+            const x = (Math.random() - 0.5) * 76;
+            const y = (Math.random() - 0.5) * 52;
+            const z = (Math.random() - 0.5) * 36;
+            const len = 1.6 + Math.random() * 1.8;
+            positions[i * 6] = x;
+            positions[i * 6 + 1] = y;
+            positions[i * 6 + 2] = z;
+            positions[i * 6 + 3] = x - 0.25;
+            positions[i * 6 + 4] = y - len;
+            positions[i * 6 + 5] = z;
+          }
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+          const mat = new THREE.LineBasicMaterial({ color: 0x7dd3fc, transparent: true, opacity: 0.46 });
+          const lines = new THREE.LineSegments(geo, mat);
+          this.group.add(lines);
+          this.items.push(lines);
+        }
+
+        const animate = (now) => {
+          this.rafId = requestAnimationFrame(animate);
+          this.mouseX += (this.targetX - this.mouseX) * 0.05;
+          this.mouseY += (this.targetY - this.mouseY) * 0.05;
+
+          this.camera.position.x = this.mouseX * 4.5;
+          this.camera.position.y = -this.mouseY * 3.2;
+          this.camera.lookAt(0, 0, 0);
+
+          if (this.mode === 'crystals') {
+            for (const m of this.items) {
+              m.rotation.x += m.userData.rx;
+              m.rotation.y += m.userData.ry;
+              m.position.y = m.userData.baseY + Math.sin(now * m.userData.floatSpeed + m.userData.phase) * m.userData.floatAmp;
+            }
+          } else if (this.mode === 'stars') {
+            this.group.rotation.y += 0.00055;
+            this.group.rotation.x += 0.00018;
+          } else if (this.mode === 'sakura') {
+            for (const p of this.items) {
+              p.position.y -= p.userData.vy;
+              p.position.x += p.userData.vx + Math.sin(now * 0.0012 + p.userData.sway) * 0.025;
+              p.rotation.x += p.userData.rx;
+              p.rotation.y += p.userData.ry;
+              if (p.position.y < -26) {
+                p.position.y = 26;
+                p.position.x = (Math.random() - 0.5) * 72;
+              }
+            }
+          } else if (this.mode === 'rain') {
+            const lines = this.items[0];
+            if (lines) {
+              const pos = lines.geometry.attributes.position.array;
+              for (let i = 0; i < pos.length; i += 6) {
+                pos[i + 1] -= 0.72;
+                pos[i + 4] -= 0.72;
+                if (pos[i + 1] < -26) {
+                  const dy = pos[i + 1] - pos[i + 4];
+                  pos[i + 1] = 28;
+                  pos[i + 4] = 28 - dy;
+                }
+              }
+              lines.geometry.attributes.position.needsUpdate = true;
+            }
+          }
+
+          this.renderer.render(this.scene, this.camera);
+        };
+        this.rafId = requestAnimationFrame(animate);
+      }
+    };
+
+    function setThreeEffect(mode) {
+      state.threeEffect = mode;
+      saveState();
+      ThreeEngine.setMode(mode);
+      syncThreeUi();
+    }
+
+    function cycleThreeEffectQuick() {
+      const modes = ['crystals', 'stars', 'sakura', 'rain', 'off'];
+      const labels = { crystals: '3D Kristallar', stars: 'Yulduzli Koinot', sakura: 'Sakura Yaproqlari', rain: "3D Yomg'ir", off: "3D O'chiq" };
+      const next = modes[(modes.indexOf(state.threeEffect) + 1) % modes.length];
+      setThreeEffect(next);
+      showToast(`✨ 3D Effekt: ${labels[next]}`, 'info');
+    }
+
+    function syncThreeUi() {
+      const sel = document.getElementById('sidebar-3d-select');
+      if (sel) sel.value = state.threeEffect;
+      document.querySelectorAll('.three-pill').forEach(btn => {
+        const active = btn.dataset.three === state.threeEffect;
+        btn.classList.toggle('bg-indigo-500/35', active);
+        btn.classList.toggle('border-indigo-400', active);
+        btn.classList.toggle('text-white', active);
+      });
+    }
+
+    // ---------- Navigation & Mood / Quotes ----------
+    const SECTION_TITLES = {
+      tasks: 'Vazifalar & Kunlik Reja',
+      pomodoro: 'Pomidor & Study Hub',
+      wallpapers: '3D Fon & Rasmlar Studiyasi',
+      habits: 'Odatlar Trekeri & Statistika'
+    };
+
+    function switchSection(section) {
+      state.activeSection = section;
+      saveState();
+      ['tasks', 'pomodoro', 'wallpapers', 'habits'].forEach(sec => {
+        const el = document.getElementById(`section-${sec}`);
+        if (el) el.classList.toggle('hidden', sec !== section);
+      });
+      document.getElementById('header-section-title').textContent = SECTION_TITLES[section] || 'Fokus3D Studio';
+
+      document.querySelectorAll('.nav-section-btn').forEach(btn => {
+        const isActive = btn.dataset.section === section;
+        btn.className = `nav-section-btn w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition ${
+          isActive
+            ? 'bg-gradient-to-r from-indigo-500/35 to-violet-500/25 border border-indigo-400/40 text-white shadow-lg shadow-indigo-950/40'
+            : 'text-slate-300 hover:bg-white/10 hover:text-white border border-transparent'
+        }`;
+      });
+
+      if (section === 'wallpapers') renderWallpaperGallery();
+      if (section === 'pomodoro') { renderPomoTaskOptions(); renderStudyBlocks(); renderStudyHistory(); }
+      if (section === 'habits') { renderHabits(); renderStatistics(); }
+      if (section === 'tasks') renderTasksView();
+      toggleMobileSidebar(false);
+    }
+
+    function toggleMobileSidebar(open) {
+      const sb = document.getElementById('sidebar');
+      const bd = document.getElementById('mobile-sidebar-backdrop');
+      if (open) {
+        sb.classList.remove('-translate-x-full');
+        bd.classList.remove('hidden');
+      } else {
+        sb.classList.add('-translate-x-full');
+        bd.classList.add('hidden');
+      }
+    }
+
+    function setMood(moodVal) {
+      state.mood = { date: getTodayISO(0), value: moodVal };
+      saveState();
+      renderMoodAndQuote();
+      const msgs = {
+        energetic: "🔥 Ajoyib g'ayrat! Eng qiyin vazifadan boshlash uchun ayni payt!",
+        great: "😊 A'lo kayfiyat! Bugungi rejalarni osonlik bilan zabt etasiz.",
+        calm: "🧘 Xotirjamlik — chuqur fokusning kaliti. 50 daqiqalik sessiyani sinab ko'ring!",
+        tired: "☕ O'zingizni asrang. 25 daqiqalik yengil pomidor va tanaffuslar bilan davom eting."
+      };
+      showToast(msgs[moodVal] || 'Kayfiyat saqlandi', 'info');
+    }
+
+    function nextMotivationQuote() {
+      state.quoteIndex = (state.quoteIndex + 1) % MOTIVATION_QUOTES.length;
+      saveState();
+      renderMoodAndQuote();
+    }
+
+    function renderMoodAndQuote() {
+      const currentMood = state.mood?.value || 'energetic';
+      document.querySelectorAll('.mood-btn').forEach(btn => {
+        const active = btn.dataset.mood === currentMood;
+        btn.classList.toggle('bg-indigo-500/35', active);
+        btn.classList.toggle('border-indigo-400', active);
+        btn.classList.toggle('text-white', active);
+        btn.classList.toggle('text-slate-300', !active);
+      });
+      const quote = MOTIVATION_QUOTES[state.quoteIndex % MOTIVATION_QUOTES.length];
+      document.getElementById('motivation-quote-text').textContent = quote;
+      const zenQuote = document.getElementById('zen-quote');
+      if (zenQuote) zenQuote.textContent = quote;
+    }
+
+    // ---------- Categories Management ----------
+    function getCategoryById(id) {
+      return state.categories.find(c => c.id === id) || state.categories[0];
+    }
+
+    function openCategoryModal() {
+      document.getElementById('cat-name-input').value = '';
+      document.getElementById('cat-emoji-input').value = '🚀';
+      document.getElementById('cat-color-input').value = '#8b5cf6';
+      document.getElementById('category-dialog').showModal();
+    }
+
+    function pickCatEmoji(emoji) {
+      document.getElementById('cat-emoji-input').value = emoji;
+    }
+
+    function saveCustomCategory(e) {
+      e.preventDefault();
+      const name = document.getElementById('cat-name-input').value.trim();
+      const emoji = document.getElementById('cat-emoji-input').value.trim() || '📌';
+      const color = document.getElementById('cat-color-input').value || '#8b5cf6';
+      if (!name) return;
+      state.categories.push({ id: uid('cat'), name, emoji, color, builtin: false });
+      saveState();
+      renderSidebarCategories();
+      renderTasksView();
+      document.getElementById('category-dialog').close();
+      showToast(`🏷️ "${name}" kategoriyasi qo'shildi!`, 'success');
+    }
+
+    function deleteCustomCategory(catId, event) {
+      event.stopPropagation();
+      const cat = getCategoryById(catId);
+      if (!cat || cat.builtin) return;
+      state.categories = state.categories.filter(c => c.id !== catId);
+      state.tasks.forEach(t => {
+        if (t.categoryId === catId) t.categoryId = state.categories[0].id;
+      });
+      if (state.categoryFilter === catId) state.categoryFilter = null;
+      saveState();
+      renderSidebarCategories();
+      renderTasksView();
+      showToast(`Kategoriya o'chirildi.`, 'info');
+    }
+
+    function renderSidebarCategories() {
+      const container = document.getElementById('sidebar-categories');
+      if (!container) return;
+      container.innerHTML = state.categories.map(cat => {
+        const count = state.tasks.filter(t => t.categoryId === cat.id && t.status !== 'done').length;
+        const active = state.categoryFilter === cat.id && state.activeSection === 'tasks';
+        return `
+          <div class="group flex items-center gap-1">
+            <button type="button" onclick="setCategoryFilter('${escapeHtml(cat.id)}')" class="flex-1 flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-medium transition ${
+              active ? 'bg-white/15 text-white border border-white/20' : 'text-slate-300 hover:bg-white/10 hover:text-white border border-transparent'
+            }">
+              <span class="flex items-center gap-2 min-w-0">
+                <span class="w-2 h-2 rounded-full shrink-0" style="background:${escapeHtml(cat.color)}"></span>
+                <span>${escapeHtml(cat.emoji)}</span>
+                <span class="truncate">${escapeHtml(cat.name)}</span>
+              </span>
+              <span class="text-[11px] font-mono text-slate-400 ml-1">${count}</span>
+            </button>
+            ${!cat.builtin ? `<button type="button" onclick="deleteCustomCategory('${escapeHtml(cat.id)}', event)" class="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-rose-500/25 text-rose-300 text-[10px] transition" title="Kategoriyani o'chirish" aria-label="Kategoriyani o'chirish">✕</button>` : ''}
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ---------- Smart Deadline Formatter ----------
+    function analyzeDeadline(task) {
+      if (task.status === 'done') {
+        return { label: '✅ Bajarildi', isOverdue: false, isUrgent: false, sortTime: Infinity, badgeClass: 'bg-emerald-500/20 text-emerald-200 border-emerald-400/30' };
+      }
+      if (!task.deadlineDate) {
+        return { label: '📅 Muddat belgilanmagan', isOverdue: false, isUrgent: false, sortTime: Number.MAX_SAFE_INTEGER - 1, badgeClass: 'bg-white/10 text-slate-300 border-white/10' };
+      }
+      const timeStr = task.deadlineTime || '23:59';
+      const target = new Date(`${task.deadlineDate}T${timeStr}:00`);
+      const now = new Date();
+      const diffMs = target.getTime() - now.getTime();
+      const diffMins = Math.round(diffMs / 60000);
+      const diffHours = Math.floor(Math.abs(diffMins) / 60);
+      const remMins = Math.abs(diffMins) % 60;
+
+      const todayStr = getTodayISO(0);
+      const tomorrowStr = getTodayISO(1);
+
+      if (diffMs < 0) {
+        let agoText = '';
+        if (diffHours >= 24) {
+          agoText = `${Math.floor(diffHours / 24)} kun oldin`;
+        } else if (diffHours >= 1) {
+          agoText = `${diffHours} soat oldin`;
+        } else {
+          agoText = `${Math.max(1, remMins)} daq oldin`;
+        }
+        return {
+          label: `⚠️ Muddati o'tgan (${agoText})`,
+          isOverdue: true,
+          isUrgent: true,
+          sortTime: target.getTime(),
+          badgeClass: 'badge-overdue bg-rose-500/25 text-rose-200 border-rose-400/55 font-bold'
+        };
+      }
+
+      if (task.deadlineDate === todayStr) {
+        const leftStr = diffHours >= 1 ? `${diffHours} soat ${remMins > 0 ? remMins + ' daq ' : ''}qoldi` : `${Math.max(1, remMins)} daqiqa qoldi`;
+        return {
+          label: `⏳ Bugun ${task.deadlineTime || ''} — ${leftStr}`,
+          isOverdue: false,
+          isUrgent: diffHours <= 6,
+          sortTime: target.getTime(),
+          badgeClass: diffHours <= 3 ? 'bg-amber-500/25 text-amber-200 border-amber-400/50 font-semibold' : 'bg-indigo-500/25 text-indigo-200 border-indigo-400/40'
+        };
+      }
+
+      if (task.deadlineDate === tomorrowStr) {
+        return {
+          label: `📆 Ertaga ${task.deadlineTime || ''}`.trim(),
+          isOverdue: false,
+          isUrgent: false,
+          sortTime: target.getTime(),
+          badgeClass: 'bg-cyan-500/20 text-cyan-200 border-cyan-400/35'
+        };
+      }
+
+      const daysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+      const shortMonths = ['Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyn', 'Iyl', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek'];
+      return {
+        label: `📅 ${target.getDate()} ${shortMonths[target.getMonth()]} ${task.deadlineTime || ''} (${daysLeft} kun qoldi)`,
+        isOverdue: false,
+        isUrgent: false,
+        sortTime: target.getTime(),
+        badgeClass: 'bg-white/10 text-slate-200 border-white/15'
+      };
+    }
+
+    // ---------- Tasks Filtering, Sorting & Rendering ----------
+    function setTaskFilter(filter) {
+      state.taskFilter = filter;
+      state.categoryFilter = null;
+      if (state.activeSection !== 'tasks') switchSection('tasks');
+      saveState();
+      renderTasksView();
+    }
+
+    function setCategoryFilter(catId) {
+      state.categoryFilter = catId;
+      if (catId) state.taskFilter = 'all';
+      if (state.activeSection !== 'tasks') switchSection('tasks');
+      saveState();
+      renderSidebarCategories();
+      renderTasksView();
+    }
+
+    function setTaskSearch(val) {
+      state.searchQuery = val;
+      renderTasksView();
+    }
+
+    function setTaskSort(val) {
+      state.taskSort = val;
+      saveState();
+      renderTasksView();
+    }
+
+    function setTaskViewMode(mode) {
+      state.taskViewMode = mode;
+      saveState();
+      renderTasksView();
+    }
+
+    function getFilteredTasks() {
+      const today = getTodayISO(0);
+      const q = (state.searchQuery || '').trim().toLowerCase();
+
+      let list = state.tasks.filter(t => {
+        if (state.categoryFilter && t.categoryId !== state.categoryFilter) return false;
+
+        if (state.taskFilter === 'today') {
+          if (t.deadlineDate !== today) return false;
+        } else if (state.taskFilter === 'urgent') {
+          const dl = analyzeDeadline(t);
+          if (t.status === 'done') return false;
+          if (!(t.priority === 'high' || t.pinned || dl.isOverdue || dl.isUrgent)) return false;
+        } else if (state.taskFilter === 'completed') {
+          if (t.status !== 'done') return false;
+        }
+
+        if (q) {
+          const cat = getCategoryById(t.categoryId);
+          const hay = `${t.title} ${t.notes || ''} ${cat.name} ${(t.subtasks || []).map(s => s.text).join(' ')}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+
+      const prioRank = { high: 0, medium: 1, low: 2 };
+      list.sort((a, b) => {
+        if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+        if (state.taskSort === 'deadline') {
+          return analyzeDeadline(a).sortTime - analyzeDeadline(b).sortTime;
+        }
+        if (state.taskSort === 'priority') {
+          const pr = (prioRank[a.priority] ?? 1) - (prioRank[b.priority] ?? 1);
+          if (pr !== 0) return pr;
+          return analyzeDeadline(a).sortTime - analyzeDeadline(b).sortTime;
+        }
+        return (b.createdAt || 0) - (a.createdAt || 0);
+      });
+
+      return list;
+    }
+
+    function updateFilterAndStatCounters() {
+      const today = getTodayISO(0);
+      const total = state.tasks.length;
+      const done = state.tasks.filter(t => t.status === 'done').length;
+      const active = total - done;
+      const todayList = state.tasks.filter(t => t.deadlineDate === today);
+      const todayDone = todayList.filter(t => t.status === 'done').length;
+      const urgent = state.tasks.filter(t => {
+        if (t.status === 'done') return false;
+        const dl = analyzeDeadline(t);
+        return t.priority === 'high' || t.pinned || dl.isOverdue || dl.isUrgent;
+      }).length;
+      const overdue = state.tasks.filter(t => t.status !== 'done' && analyzeDeadline(t).isOverdue).length;
+
+      document.getElementById('count-all').textContent = total;
+      document.getElementById('count-today').textContent = todayList.length;
+      document.getElementById('count-urgent').textContent = urgent;
+      document.getElementById('count-completed').textContent = done;
+      document.getElementById('nav-badge-active').textContent = active;
+
+      // Top KPI cards
+      document.getElementById('stat-today-tasks').textContent = `${todayDone}/${todayList.length}`;
+      document.getElementById('stat-today-sub').textContent = todayList.length ? `${todayList.length - todayDone} ta qoldi` : 'Bugun reja bo\'sh';
+      const pct = total ? Math.round((done / total) * 100) : 0;
+      document.getElementById('stat-completion-rate').textContent = `${pct}%`;
+      document.getElementById('stat-completion-bar').style.width = `${pct}%`;
+
+      const todaySessions = state.studyHistory.filter(s => s.date === today);
+      const focusMins = todaySessions.reduce((sum, s) => sum + (s.minutes || 0), 0);
+      document.getElementById('stat-focus-today').textContent = `${focusMins} daq`;
+      document.getElementById('stat-pomo-today-count').textContent = `${todaySessions.length} ta sessiya`;
+      document.getElementById('stat-overdue-count').textContent = `${overdue} / ${urgent}`;
+
+      // Max habit streak in nav
+      const maxStreak = state.habits.reduce((m, h) => Math.max(m, calcHabitStreak(h)), 0);
+      document.getElementById('nav-badge-streak').textContent = `🔥${maxStreak}`;
+
+      // Active filter styles
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        const isActive = !state.categoryFilter && state.taskFilter === btn.dataset.filter && state.activeSection === 'tasks';
+        btn.className = `filter-btn w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition ${
+          isActive ? 'bg-white/15 text-white font-semibold border border-white/20' : 'text-slate-300 hover:bg-white/10 hover:text-white border border-transparent'
+        }`;
+      });
+
+      const clearBtn = document.getElementById('clear-cat-filter-btn');
+      if (state.categoryFilter) {
+        const cat = getCategoryById(state.categoryFilter);
+        document.getElementById('active-cat-filter-label').textContent = `${cat.emoji} ${cat.name}`;
+        clearBtn.classList.remove('hidden');
+        clearBtn.classList.add('inline-flex');
+      } else {
+        clearBtn.classList.add('hidden');
+        clearBtn.classList.remove('inline-flex');
+      }
+
+      // View switcher styles
+      const gBtn = document.getElementById('view-btn-grid');
+      const kBtn = document.getElementById('view-btn-kanban');
+      const activeCls = 'bg-indigo-500 text-white shadow';
+      const idleCls = 'text-slate-300 hover:text-white';
+      gBtn.className = `px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${state.taskViewMode === 'grid' ? activeCls : idleCls}`;
+      kBtn.className = `px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${state.taskViewMode === 'kanban' ? activeCls : idleCls}`;
+
+      renderSidebarCategories();
+    }
+
+    function buildTaskCardHtml(task, isKanban = false) {
+      const cat = getCategoryById(task.categoryId);
+      const dl = analyzeDeadline(task);
+      const isDone = task.status === 'done';
+      const prioMap = {
+        high: { text: '🔥 Yuqori', cls: 'bg-rose-500/20 text-rose-200 border-rose-400/35' },
+        medium: { text: "⚡ O'rta", cls: 'bg-amber-500/20 text-amber-200 border-amber-400/35' },
+        low: { text: '🌱 Past', cls: 'bg-emerald-500/20 text-emerald-200 border-emerald-400/35' }
+      };
+      const pr = prioMap[task.priority] || prioMap.medium;
+      const subtasks = task.subtasks || [];
+      const subDone = subtasks.filter(s => s.done).length;
+      const subPct = subtasks.length ? Math.round((subDone / subtasks.length) * 100) : 0;
+
+      const dragAttrs = isKanban
+        ? `draggable="true" ondragstart="onKanbanDragStart(event, '${escapeHtml(task.id)}')" ondragend="onKanbanDragEnd(event)"`
+        : '';
+
+      return `
+        <article ${dragAttrs} class="glass-card tilt-card rounded-2xl p-4 flex flex-col gap-3 ${isDone ? 'opacity-75' : ''} ${task.pinned ? 'border-amber-400/45' : ''} ${isKanban ? 'cursor-grab active:cursor-grabbing' : ''}">
+          <!-- Top Row: Category + Pin & Actions -->
+          <div class="flex items-start justify-between gap-2">
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border" style="background:${escapeHtml(cat.color)}24; border-color:${escapeHtml(cat.color)}55; color:#f8fafc;">
+              <span>${escapeHtml(cat.emoji)}</span>
+              <span class="truncate max-w-[140px]">${escapeHtml(cat.name)}</span>
+            </span>
+            <div class="flex items-center gap-1 shrink-0">
+              <button type="button" onclick="toggleTaskPin('${escapeHtml(task.id)}')" class="p-1.5 rounded-lg hover:bg-white/10 text-sm transition ${task.pinned ? 'text-amber-300' : 'text-slate-500 hover:text-amber-200'}" title="Muhim qilib mahkamlash" aria-label="Mahkamlash">${task.pinned ? '⭐' : '☆'}</button>
+              <button type="button" onclick="startPomodoroForTask('${escapeHtml(task.id)}')" class="px-2 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/35 border border-rose-400/30 text-rose-200 text-[11px] font-bold transition" title="Ushbu vazifa uchun Pomidor boshlash">🍅 Fokus</button>
+              <button type="button" onclick="openTaskModal('${escapeHtml(task.id)}')" class="p-1.5 rounded-lg hover:bg-white/10 text-slate-300 hover:text-white text-xs transition" title="Tahrirlash" aria-label="Tahrirlash">✏️</button>
+              <button type="button" onclick="deleteTask('${escapeHtml(task.id)}')" class="p-1.5 rounded-lg hover:bg-rose-500/25 text-slate-400 hover:text-rose-200 text-xs transition" title="O'chirish" aria-label="O'chirish">🗑️</button>
+            </div>
+          </div>
+
+          <!-- Title & Complete Checkbox -->
+          <div class="flex items-start gap-3">
+            <button type="button" onclick="toggleTaskDone('${escapeHtml(task.id)}')" class="mt-0.5 w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition ${
+              isDone ? 'bg-emerald-500 border-emerald-400 text-slate-950 font-bold' : 'border-white/30 hover:border-indigo-400 bg-white/5'
+            }" aria-label="${isDone ? 'Bajarilmadi deb belgilash' : 'Bajarildi deb belgilash'}">
+              ${isDone ? '✓' : ''}
+            </button>
+            <div class="min-w-0 flex-1">
+              <h3 class="text-sm font-bold leading-snug ${isDone ? 'line-through text-slate-400' : 'text-white'}">${escapeHtml(task.title)}</h3>
+              ${task.notes ? `<p class="text-xs text-slate-300/85 mt-1 line-clamp-2">${escapeHtml(task.notes)}</p>` : ''}
+            </div>
+          </div>
+
+          <!-- Deadline & Priority + Pomodoro Counter -->
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span class="px-2.5 py-1 rounded-lg text-[11px] border ${dl.badgeClass}">${escapeHtml(dl.label)}</span>
+            <span class="px-2 py-1 rounded-lg text-[11px] font-semibold border ${pr.cls}">${pr.text}</span>
+            <span class="px-2 py-1 rounded-lg text-[11px] font-mono font-bold bg-white/10 border border-white/10 text-rose-200" title="Bajarilgan / Maqsad pomidorlar">🍅 ${task.completedPomodoros || 0}/${task.targetPomodoros || 1}</span>
+          </div>
+
+          <!-- Subtasks Checklist -->
+          ${subtasks.length ? `
+            <div class="pt-2 border-t border-white/10 space-y-2">
+              <div class="flex items-center justify-between text-[11px] text-slate-300">
+                <span>Qadamlar (${subDone}/${subtasks.length})</span>
+                <span class="font-mono text-indigo-300">${subPct}%</span>
+              </div>
+              <div class="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                <div class="h-full bg-gradient-to-r from-indigo-400 to-cyan-400 transition-all duration-300" style="width:${subPct}%"></div>
+              </div>
+              <div class="space-y-1">
+                ${subtasks.map(s => `
+                  <label class="flex items-center gap-2 text-xs cursor-pointer group/sub">
+                    <input type="checkbox" ${s.done ? 'checked' : ''} onchange="toggleSubtask('${escapeHtml(task.id)}', '${escapeHtml(s.id)}')" class="accent-indigo-400 rounded cursor-pointer" />
+                    <span class="${s.done ? 'line-through text-slate-400' : 'text-slate-200 group-hover/sub:text-white'}">${escapeHtml(s.text)}</span>
+                  </label>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- Quick Status Switcher (helpful on mobile & Kanban) -->
+          ${isKanban ? `
+            <div class="pt-2 border-t border-white/10 flex items-center justify-between gap-1 text-[10px]">
+              <button type="button" onclick="moveTaskStatus('${escapeHtml(task.id)}', 'todo')" class="flex-1 py-1 rounded-lg ${task.status === 'todo' ? 'bg-indigo-500/35 text-white font-bold' : 'bg-white/5 text-slate-400 hover:text-white'}">Reja</button>
+              <button type="button" onclick="moveTaskStatus('${escapeHtml(task.id)}', 'doing')" class="flex-1 py-1 rounded-lg ${task.status === 'doing' ? 'bg-amber-500/35 text-white font-bold' : 'bg-white/5 text-slate-400 hover:text-white'}">Fokusda</button>
+              <button type="button" onclick="moveTaskStatus('${escapeHtml(task.id)}', 'done')" class="flex-1 py-1 rounded-lg ${task.status === 'done' ? 'bg-emerald-500/35 text-white font-bold' : 'bg-white/5 text-slate-400 hover:text-white'}">Bajarildi</button>
+            </div>
+          ` : ''}
+        </article>
+      `;
+    }
+
+    function renderTasksView() {
+      updateFilterAndStatCounters();
+      const root = document.getElementById('tasks-render-root');
+      if (!root) return;
+      const tasks = getFilteredTasks();
+
+      if (state.taskViewMode === 'kanban') {
+        const cols = [
+          { key: 'todo', title: '📋 Rejalashtirilgan', accent: 'border-indigo-400/35', dot: 'bg-indigo-400' },
+          { key: 'doing', title: '🚀 Fokusda (Bajarilmoqda)', accent: 'border-amber-400/35', dot: 'bg-amber-400' },
+          { key: 'done', title: '✅ Bajarildi', accent: 'border-emerald-400/35', dot: 'bg-emerald-400' }
+        ];
+
+        root.innerHTML = `
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+            ${cols.map(col => {
+              const items = tasks.filter(t => t.status === col.key);
+              return `
+                <div class="kanban-column glass-panel rounded-3xl p-4 space-y-3.5 min-h-[340px] border ${col.accent} transition"
+                     ondragover="onKanbanDragOver(event)"
+                     ondragleave="onKanbanDragLeave(event)"
+                     ondrop="onKanbanDrop(event, '${col.key}')">
+                  <div class="flex items-center justify-between pb-2 border-b border-white/10">
+                    <h3 class="text-sm font-extrabold text-white flex items-center gap-2">
+                      <span class="w-2.5 h-2.5 rounded-full ${col.dot}"></span>
+                      <span>${col.title}</span>
+                    </h3>
+                    <span class="px-2 py-0.5 rounded-full bg-white/10 text-xs font-mono text-slate-200">${items.length}</span>
+                  </div>
+                  <div class="space-y-3">
+                    ${items.length ? items.map(t => buildTaskCardHtml(t, true)).join('') : `<p class="text-xs text-slate-400 text-center py-10 border border-dashed border-white/10 rounded-2xl">Vazifani shu yerga tortib tashlang</p>`}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      } else {
+        if (!tasks.length) {
+          root.innerHTML = `
+            <div class="glass-panel rounded-3xl p-12 text-center space-y-3">
+              <div class="text-5xl">🌌</div>
+              <h3 class="text-base font-extrabold text-white">Hozircha bu filtrda vazifa yo'q</h3>
+              <p class="text-xs text-slate-300 max-w-md mx-auto">Yangi vazifa qo'shing yoki chap menyudan boshqa filtr / kategoriyani tanlang.</p>
+              <button type="button" onclick="openTaskModal()" class="mt-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-500 text-xs font-bold text-white shadow-lg">+ Yangi vazifa qo'shish</button>
+            </div>
+          `;
+        } else {
+          root.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">${tasks.map(t => buildTaskCardHtml(t, false)).join('')}</div>`;
+        }
+      }
+
+      bindTiltCards();
+    }
+
+    // ---------- Kanban Drag & Drop ----------
+    let draggedTaskId = null;
+    function onKanbanDragStart(e, taskId) {
+      draggedTaskId = taskId;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', taskId);
+      e.currentTarget.classList.add('opacity-50');
+    }
+    function onKanbanDragEnd(e) {
+      e.currentTarget.classList.remove('opacity-50');
+      document.querySelectorAll('.kanban-column').forEach(c => c.classList.remove('drag-over'));
+    }
+    function onKanbanDragOver(e) {
+      e.preventDefault();
+      e.currentTarget.classList.add('drag-over');
+    }
+    function onKanbanDragLeave(e) {
+      e.currentTarget.classList.remove('drag-over');
+    }
+    function onKanbanDrop(e, newStatus) {
+      e.preventDefault();
+      e.currentTarget.classList.remove('drag-over');
+      const taskId = draggedTaskId || e.dataTransfer.getData('text/plain');
+      if (taskId) moveTaskStatus(taskId, newStatus);
+      draggedTaskId = null;
+    }
+
+    // ---------- Task CRUD & Modal ----------
+    let draftSubtasks = [];
+
+    function openTaskModal(editId = null) {
+      const dialog = document.getElementById('task-dialog');
+      const catSelect = document.getElementById('task-category-input');
+      catSelect.innerHTML = state.categories.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.emoji)} ${escapeHtml(c.name)}</option>`).join('');
+
+      if (editId) {
+        const t = state.tasks.find(x => x.id === editId);
+        if (!t) return;
+        document.getElementById('task-dialog-title').textContent = '✏️ Vazifani Tahrirlash';
+        document.getElementById('task-edit-id').value = t.id;
+        document.getElementById('task-title-input').value = t.title;
+        document.getElementById('task-notes-input').value = t.notes || '';
+        catSelect.value = t.categoryId;
+        document.getElementById('task-priority-input').value = t.priority;
+        document.getElementById('task-date-input').value = t.deadlineDate || '';
+        document.getElementById('task-time-input').value = t.deadlineTime || '';
+        document.getElementById('task-pomo-input').value = String(t.targetPomodoros || 2);
+        document.getElementById('task-status-input').value = t.status || 'todo';
+        document.getElementById('task-pinned-input').checked = Boolean(t.pinned);
+        draftSubtasks = (t.subtasks || []).map(s => ({ ...s }));
+      } else {
+        document.getElementById('task-dialog-title').textContent = '✨ Yangi Vazifa Yaratish';
+        document.getElementById('task-edit-id').value = '';
+        document.getElementById('task-title-input').value = '';
+        document.getElementById('task-notes-input').value = '';
+        catSelect.value = state.categoryFilter || state.categories[0].id;
+        document.getElementById('task-priority-input').value = 'medium';
+        document.getElementById('task-date-input').value = getTodayISO(0);
+        document.getElementById('task-time-input').value = '20:00';
+        document.getElementById('task-pomo-input').value = '2';
+        document.getElementById('task-status-input').value = 'todo';
+        document.getElementById('task-pinned-input').checked = false;
+        draftSubtasks = [];
+      }
+
+      document.getElementById('subtask-draft-input').value = '';
+      renderDraftSubtasks();
+      dialog.showModal();
+    }
+
+    function addDraftSubtask() {
+      const inp = document.getElementById('subtask-draft-input');
+      const text = inp.value.trim();
+      if (!text) return;
+      draftSubtasks.push({ id: uid('sub'), text, done: false });
+      inp.value = '';
+      renderDraftSubtasks();
+    }
+
+    function removeDraftSubtask(id) {
+      draftSubtasks = draftSubtasks.filter(s => s.id !== id);
+      renderDraftSubtasks();
+    }
+
+    function renderDraftSubtasks() {
+      const list = document.getElementById('draft-subtasks-list');
+      if (!draftSubtasks.length) {
+        list.innerHTML = `<p class="text-[11px] text-slate-400">Hozircha kichik qadamlar yo'q.</p>`;
+        return;
+      }
+      list.innerHTML = draftSubtasks.map(s => `
+        <div class="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-xs">
+          <span class="truncate text-slate-200">• ${escapeHtml(s.text)}</span>
+          <button type="button" onclick="removeDraftSubtask('${escapeHtml(s.id)}')" class="text-rose-300 hover:text-rose-200 text-xs">✕</button>
+        </div>
+      `).join('');
+    }
+
+    function saveTaskForm(e) {
+      e.preventDefault();
+      const editId = document.getElementById('task-edit-id').value;
+      const title = document.getElementById('task-title-input').value.trim();
+      if (!title) return;
+
+      const payload = {
+        title,
+        notes: document.getElementById('task-notes-input').value.trim(),
+        categoryId: document.getElementById('task-category-input').value,
+        priority: document.getElementById('task-priority-input').value,
+        deadlineDate: document.getElementById('task-date-input').value,
+        deadlineTime: document.getElementById('task-time-input').value,
+        targetPomodoros: Number(document.getElementById('task-pomo-input').value) || 1,
+        status: document.getElementById('task-status-input').value,
+        pinned: document.getElementById('task-pinned-input').checked,
+        subtasks: draftSubtasks
+      };
+
+      if (editId) {
+        const idx = state.tasks.findIndex(t => t.id === editId);
+        if (idx !== -1) {
+          state.tasks[idx] = { ...state.tasks[idx], ...payload };
+          showToast('✅ Vazifa yangilandi!', 'success');
+        }
+      } else {
+        state.tasks.unshift({
+          id: uid('task'),
+          ...payload,
+          completedPomodoros: 0,
+          createdAt: Date.now()
+        });
+        showToast('✨ Yangi vazifa qo\'shildi!', 'success');
+      }
+
+      saveState();
+      document.getElementById('task-dialog').close();
+      renderTasksView();
+      renderPomoTaskOptions();
+    }
+
+    function toggleTaskDone(taskId) {
+      const t = state.tasks.find(x => x.id === taskId);
+      if (!t) return;
+      t.status = t.status === 'done' ? 'todo' : 'done';
+      saveState();
+      renderTasksView();
+      if (t.status === 'done') showToast('🎉 Barakalla! Vazifa bajarildi!', 'success');
+    }
+
+    function moveTaskStatus(taskId, status) {
+      const t = state.tasks.find(x => x.id === taskId);
+      if (!t || t.status === status) return;
+      t.status = status;
+      saveState();
+      renderTasksView();
+      const labels = { todo: 'Rejalashtirilgan', doing: 'Fokusda', done: 'Bajarildi' };
+      showToast(`📌 Holat: ${labels[status]}`, 'info');
+    }
+
+    function toggleTaskPin(taskId) {
+      const t = state.tasks.find(x => x.id === taskId);
+      if (!t) return;
+      t.pinned = !t.pinned;
+      saveState();
+      renderTasksView();
+    }
+
+    function toggleSubtask(taskId, subId) {
+      const t = state.tasks.find(x => x.id === taskId);
+      if (!t) return;
+      const sub = (t.subtasks || []).find(s => s.id === subId);
+      if (!sub) return;
+      sub.done = !sub.done;
+      saveState();
+      renderTasksView();
+    }
+
+    function deleteTask(taskId) {
+      state.tasks = state.tasks.filter(t => t.id !== taskId);
+      if (state.pomodoro.linkedTarget === `task:${taskId}`) {
+        state.pomodoro.linkedTarget = '';
+      }
+      saveState();
+      renderTasksView();
+      renderPomoTaskOptions();
+      showToast("🗑️ Vazifa o'chirildi.", 'info');
+    }
+
+    function startPomodoroForTask(taskId) {
+      state.pomodoro.linkedTarget = `task:${taskId}`;
+      const t = state.tasks.find(x => x.id === taskId);
+      if (t && t.status === 'todo') t.status = 'doing';
+      saveState();
+      switchSection('pomodoro');
+      renderPomoTaskOptions();
+      if (!pomoRuntime.running) togglePomoTimer();
+      showToast(`🍅 "${t ? t.title : 'Vazifa'}" uchun fokus boshlandi!`, 'success');
+    }
+
+    // ---------- Pomodoro Timer & Study Hub ----------
+    const POMO_MODES = {
+      pomodoro: { label: 'Pomidor Fokus', minutes: 25, isFocus: true },
+      deep: { label: 'Chuqur Fokus', minutes: 50, isFocus: true },
+      short: { label: 'Qisqa Tanaffus', minutes: 5, isFocus: false },
+      long: { label: 'Katta Tanaffus', minutes: 15, isFocus: false },
+      custom: { label: 'Maxsus Fokus', minutes: 35, isFocus: true }
+    };
+
+    const pomoRuntime = {
+      totalSeconds: 25 * 60,
+      remainingSeconds: 25 * 60,
+      running: false,
+      intervalId: null
+    };
+
+    function getModeMinutes(mode) {
+      if (mode === 'custom') return Math.max(1, Math.min(180, Number(state.pomodoro.customMinutes) || 35));
+      return (POMO_MODES[mode] || POMO_MODES.pomodoro).minutes;
+    }
+
+    function selectPomoMode(mode, silent = false) {
+      stopPomoInterval();
+      state.pomodoro.mode = mode;
+      const mins = getModeMinutes(mode);
+      pomoRuntime.totalSeconds = mins * 60;
+      pomoRuntime.remainingSeconds = mins * 60;
+      saveState();
+      updatePomoUI();
+      if (!silent) showToast(`⏱️ Rejim: ${(POMO_MODES[mode] || POMO_MODES.custom).label} (${mins} daq)`, 'info');
+    }
+
+    function applyCustomPomoMinutes() {
+      const val = Number(document.getElementById('custom-pomo-minutes').value);
+      if (!val || val < 1 || val > 180) {
+        showToast('1 dan 180 gacha daqiqa kiriting.', 'warning');
+        return;
+      }
+      state.pomodoro.customMinutes = val;
+      selectPomoMode('custom');
+    }
+
+    function stopPomoInterval() {
+      if (pomoRuntime.intervalId) {
+        clearInterval(pomoRuntime.intervalId);
+        pomoRuntime.intervalId = null;
+      }
+      pomoRuntime.running = false;
+    }
+
+    function togglePomoTimer() {
+      if (pomoRuntime.running) {
+        stopPomoInterval();
+        updatePomoUI();
+        return;
+      }
+      pomoRuntime.running = true;
+      updatePomoUI();
+      pomoRuntime.intervalId = setInterval(() => {
+        if (pomoRuntime.remainingSeconds > 0) {
+          pomoRuntime.remainingSeconds--;
+          updatePomoUI();
+        }
+        if (pomoRuntime.remainingSeconds <= 0) {
+          finishPomoSession();
+        }
+      }, 1000);
+    }
+
+    function resetPomoTimer() {
+      stopPomoInterval();
+      const mins = getModeMinutes(state.pomodoro.mode);
+      pomoRuntime.totalSeconds = mins * 60;
+      pomoRuntime.remainingSeconds = mins * 60;
+      updatePomoUI();
+    }
+
+    function completePomoEarly() {
+      finishPomoSession();
+    }
+
+    function getLinkedTargetLabel() {
+      const val = state.pomodoro.linkedTarget || '';
+      if (val.startsWith('task:')) {
+        const id = val.slice(5);
+        const t = state.tasks.find(x => x.id === id);
+        return t ? `📋 ${t.title}` : 'Erkin fokus sessiyasi';
+      }
+      if (val.startsWith('block:')) {
+        const id = val.slice(6);
+        const b = state.studyBlocks.find(x => x.id === id);
+        return b ? `📚 ${b.subject}` : 'Erkin fokus sessiyasi';
+      }
+      return 'Erkin fokus sessiyasi';
+    }
+
+    function finishPomoSession() {
+      stopPomoInterval();
+      playCompletionBell();
+
+      const modeKey = state.pomodoro.mode || 'pomodoro';
+      const meta = POMO_MODES[modeKey] || POMO_MODES.custom;
+      const mins = getModeMinutes(modeKey);
+
+      if (meta.isFocus) {
+        const val = state.pomodoro.linkedTarget || '';
+        let logTitle = 'Erkin fokus sessiyasi';
+
+        if (val.startsWith('task:')) {
+          const t = state.tasks.find(x => x.id === val.slice(5));
+          if (t) {
+            t.completedPomodoros = (t.completedPomodoros || 0) + 1;
+            logTitle = t.title;
+          }
+        } else if (val.startsWith('block:')) {
+          const b = state.studyBlocks.find(x => x.id === val.slice(6));
+          if (b) {
+            b.donePomos = (b.donePomos || 0) + 1;
+            logTitle = b.subject;
+          }
+        }
+
+        const now = new Date();
+        const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        state.studyHistory.unshift({
+          id: uid('sh'),
+          date: getTodayISO(0),
+          time: timeStr,
+          title: logTitle,
+          minutes: mins,
+          mode: meta.label
+        });
+
+        saveState();
+        renderTasksView();
+        renderStudyBlocks();
+        renderStudyHistory();
+        renderPomoTaskOptions();
+        showToast(`🍅 Ajoyib! ${mins} daqiqalik sessiya yakunlandi (+1 🍅)!`, 'success');
+      } else {
+        showToast('☕ Tanaffus tugadi! Yana fokusga qaytishga tayyormisiz?', 'info');
+      }
+
+      pomoRuntime.totalSeconds = mins * 60;
+      pomoRuntime.remainingSeconds = mins * 60;
+      updatePomoUI();
+    }
+
+    function setLinkedFocusTarget(val) {
+      state.pomodoro.linkedTarget = val;
+      saveState();
+      updatePomoUI();
+    }
+
+    function renderPomoTaskOptions() {
+      const sel = document.getElementById('pomo-task-select');
+      if (!sel) return;
+      const activeTasks = state.tasks.filter(t => t.status !== 'done');
+      let html = `<option value="">✨ Erkin fokus sessiyasi (bog'lanmagan)</option>`;
+      if (activeTasks.length) {
+        html += `<optgroup label="📋 Faol Vazifalar">`;
+        for (const t of activeTasks) {
+          html += `<option value="task:${escapeHtml(t.id)}">${escapeHtml(t.title)} (🍅 ${t.completedPomodoros || 0}/${t.targetPomodoros || 1})</option>`;
+        }
+        html += `</optgroup>`;
+      }
+      if (state.studyBlocks.length) {
+        html += `<optgroup label="📚 O'qish Bloklari">`;
+        for (const b of state.studyBlocks) {
+          html += `<option value="block:${escapeHtml(b.id)}">${escapeHtml(b.subject)} (🍅 ${b.donePomos || 0}/${b.targetPomos})</option>`;
+        }
+        html += `</optgroup>`;
+      }
+      sel.innerHTML = html;
+      sel.value = state.pomodoro.linkedTarget || '';
+      updatePomoUI();
+    }
+
+    function updatePomoUI() {
+      const mins = Math.floor(pomoRuntime.remainingSeconds / 60);
+      const secs = pomoRuntime.remainingSeconds % 60;
+      const formatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+
+      const display = document.getElementById('pomo-time-display');
+      const zenDisplay = document.getElementById('zen-timer-display');
+      const navBadge = document.getElementById('nav-badge-timer');
+      if (display) display.textContent = formatted;
+      if (zenDisplay) zenDisplay.textContent = formatted;
+      if (navBadge) navBadge.textContent = formatted;
+      document.title = pomoRuntime.running ? `(${formatted}) Fokus3D Studio` : 'Fokus3D Studio — 3D To-Do List, Kunlik Reja va Pomidor Study Hub';
+
+      const meta = POMO_MODES[state.pomodoro.mode] || POMO_MODES.custom;
+      const modeLbl = document.getElementById('pomo-mode-label');
+      const zenBadge = document.getElementById('zen-mode-badge');
+      if (modeLbl) modeLbl.textContent = meta.label;
+      if (zenBadge) zenBadge.textContent = meta.label;
+
+      const targetText = getLinkedTargetLabel();
+      const linkedPrev = document.getElementById('pomo-linked-preview');
+      const zenTask = document.getElementById('zen-task-title');
+      if (linkedPrev) linkedPrev.textContent = targetText;
+      if (zenTask) zenTask.textContent = targetText;
+
+      // SVG ring progress
+      const circle = document.getElementById('pomo-progress-circle');
+      if (circle) {
+        const circumference = 2 * Math.PI * 112;
+        const progress = pomoRuntime.totalSeconds > 0 ? pomoRuntime.remainingSeconds / pomoRuntime.totalSeconds : 0;
+        circle.style.strokeDasharray = `${circumference}`;
+        circle.style.strokeDashoffset = `${circumference * (1 - progress)}`;
+      }
+
+      // Buttons
+      const startBtn = document.getElementById('pomo-start-btn');
+      const zenStart = document.getElementById('zen-start-btn');
+      const btnHtml = pomoRuntime.running ? '<span>⏸</span> <span>Pauza</span>' : '<span>▶</span> <span>Boshlash</span>';
+      if (startBtn) startBtn.innerHTML = btnHtml;
+      if (zenStart) zenStart.innerHTML = btnHtml;
+
+      document.querySelectorAll('.pomo-mode-btn').forEach(btn => {
+        const active = btn.dataset.pomoMode === state.pomodoro.mode;
+        btn.className = `pomo-mode-btn px-3.5 py-2 rounded-xl text-xs font-bold transition ${
+          active ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-600/35' : 'bg-white/10 text-slate-300 hover:bg-white/15 hover:text-white'
+        }`;
+      });
+    }
+
+    // ---------- Study Sessions Planner & History ----------
+    function addStudyBlock(e) {
+      e.preventDefault();
+      const subInp = document.getElementById('study-subject-input');
+      const pomoInp = document.getElementById('study-pomos-input');
+      const subject = subInp.value.trim();
+      if (!subject) return;
+      state.studyBlocks.unshift({
+        id: uid('sb'),
+        subject,
+        targetPomos: Number(pomoInp.value) || 3,
+        donePomos: 0
+      });
+      subInp.value = '';
+      saveState();
+      renderStudyBlocks();
+      renderPomoTaskOptions();
+      showToast(`📚 "${subject}" o'qish bloki qo'shildi!`, 'success');
+    }
+
+    function launchStudyBlock(id) {
+      state.pomodoro.linkedTarget = `block:${id}`;
+      saveState();
+      renderPomoTaskOptions();
+      if (!pomoRuntime.running) togglePomoTimer();
+      const b = state.studyBlocks.find(x => x.id === id);
+      showToast(`🍅 "${b ? b.subject : 'Sessiya'}" boshlandi!`, 'success');
+    }
+
+    function deleteStudyBlock(id) {
+      state.studyBlocks = state.studyBlocks.filter(b => b.id !== id);
+      if (state.pomodoro.linkedTarget === `block:${id}`) state.pomodoro.linkedTarget = '';
+      saveState();
+      renderStudyBlocks();
+      renderPomoTaskOptions();
+    }
+
+    function renderStudyBlocks() {
+      const list = document.getElementById('study-blocks-list');
+      if (!list) return;
+      if (!state.studyBlocks.length) {
+        list.innerHTML = `<p class="text-xs text-slate-400 text-center py-6">O'qish bloklari yo'q. Yuqoridan fan qo'shing!</p>`;
+        return;
+      }
+      list.innerHTML = state.studyBlocks.map(b => {
+        const pct = Math.min(100, Math.round(((b.donePomos || 0) / b.targetPomos) * 100));
+        return `
+          <div class="rounded-2xl bg-white/5 border border-white/10 p-3.5 space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <div class="min-w-0">
+                <p class="text-xs sm:text-sm font-bold text-white truncate">${escapeHtml(b.subject)}</p>
+                <p class="text-[11px] font-mono text-rose-200 mt-0.5">🍅 ${b.donePomos || 0} / ${b.targetPomos} pomidor (${pct}%)</p>
+              </div>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <button type="button" onclick="launchStudyBlock('${escapeHtml(b.id)}')" class="px-2.5 py-1.5 rounded-xl bg-indigo-500/25 hover:bg-indigo-500/40 border border-indigo-400/35 text-indigo-100 text-[11px] font-bold transition">▶ Boshlash</button>
+                <button type="button" onclick="deleteStudyBlock('${escapeHtml(b.id)}')" class="p-1.5 rounded-lg hover:bg-rose-500/25 text-slate-400 hover:text-rose-200 text-xs" aria-label="O'chirish">✕</button>
+              </div>
+            </div>
+            <div class="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+              <div class="h-full bg-gradient-to-r from-rose-400 to-amber-400 transition-all duration-300" style="width:${pct}%"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function clearTodayStudyHistory() {
+      const today = getTodayISO(0);
+      state.studyHistory = state.studyHistory.filter(s => s.date !== today);
+      saveState();
+      renderStudyHistory();
+      updateFilterAndStatCounters();
+      showToast('Bugungi o\'qish tarixi tozalandi.', 'info');
+    }
+
+    function renderStudyHistory() {
+      const list = document.getElementById('study-history-list');
+      const summary = document.getElementById('study-history-summary');
+      if (!list) return;
+      const today = getTodayISO(0);
+      const todayItems = state.studyHistory.filter(s => s.date === today);
+      const totalMins = todayItems.reduce((acc, s) => acc + (s.minutes || 0), 0);
+      summary.textContent = `Jami: ${totalMins} daqiqa (${todayItems.length} ta sessiya)`;
+
+      if (!todayItems.length) {
+        list.innerHTML = `<p class="text-xs text-slate-400 text-center py-6">Bugun hali yakunlangan sessiya yo'q. Taymerni ishga tushiring! 🍅</p>`;
+        return;
+      }
+      list.innerHTML = todayItems.map(item => `
+        <div class="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-2xl bg-white/5 border border-white/10">
+          <div class="min-w-0">
+            <p class="text-xs font-bold text-white truncate">${escapeHtml(item.title)}</p>
+            <p class="text-[11px] text-slate-400">${escapeHtml(item.mode)} • ${escapeHtml(item.time)}</p>
+          </div>
+          <span class="shrink-0 px-2.5 py-1 rounded-lg bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 text-xs font-mono font-bold">+${item.minutes} daq</span>
+        </div>
+      `).join('');
+    }
+
+    // ---------- Web Audio API Ambient Synthesizer & Bell ----------
+    const SoundSynth = {
+      ctx: null,
+      masterGain: null,
+      activeNodes: [],
+      mode: 'off',
+
+      ensureContext() {
+        if (!this.ctx) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioCtx();
+          this.masterGain = this.ctx.createGain();
+          this.masterGain.gain.value = (state.pomodoro.ambientVolume ?? 45) / 100 * 0.45;
+          this.masterGain.connect(this.ctx.destination);
+        }
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+      },
+
+      stopAmbient() {
+        this.activeNodes.forEach(node => {
+          try { if (node.stop) node.stop(); } catch {}
+          try { node.disconnect(); } catch {}
+        });
+        this.activeNodes = [];
+        this.mode = 'off';
+      },
+
+      createNoiseBuffer(type = 'pink') {
+        const len = this.ctx.sampleRate * 4;
+        const buffer = this.ctx.createBuffer(2, len, this.ctx.sampleRate);
+        for (let ch = 0; ch < 2; ch++) {
+          const out = buffer.getChannelData(ch);
+          if (type === 'brown') {
+            let last = 0;
+            for (let i = 0; i < len; i++) {
+              const w = Math.random() * 2 - 1;
+              out[i] = (last + 0.02 * w) / 1.02;
+              last = out[i];
+              out[i] *= 3.2;
+            }
+          } else {
+            let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+            for (let i = 0; i < len; i++) {
+              const w = Math.random() * 2 - 1;
+              b0 = 0.99886 * b0 + w * 0.0555179;
+              b1 = 0.99332 * b1 + w * 0.0750759;
+              b2 = 0.96900 * b2 + w * 0.1538520;
+              b3 = 0.86650 * b3 + w * 0.3104856;
+              b4 = 0.55000 * b4 + w * 0.5329522;
+              b5 = -0.7616 * b5 - w * 0.0168980;
+              out[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.08;
+              b6 = w * 0.115926;
+            }
+          }
+        }
+        return buffer;
+      },
+
+      play(mode) {
+        this.stopAmbient();
+        if (mode === 'off') return;
+        this.ensureContext();
+        this.mode = mode;
+
+        if (mode === 'rain') {
+          const src = this.ctx.createBufferSource();
+          src.buffer = this.createNoiseBuffer('pink');
+          src.loop = true;
+
+          const lp = this.ctx.createBiquadFilter();
+          lp.type = 'lowpass';
+          lp.frequency.value = 1350;
+
+          const hp = this.ctx.createBiquadFilter();
+          hp.type = 'highpass';
+          hp.frequency.value = 180;
+
+          src.connect(hp);
+          hp.connect(lp);
+          lp.connect(this.masterGain);
+          src.start();
+          this.activeNodes.push(src, lp, hp);
+        } else if (mode === 'ocean') {
+          const src = this.ctx.createBufferSource();
+          src.buffer = this.createNoiseBuffer('brown');
+          src.loop = true;
+
+          const filter = this.ctx.createBiquadFilter();
+          filter.type = 'lowpass';
+          filter.frequency.value = 420;
+
+          const waveGain = this.ctx.createGain();
+          waveGain.gain.value = 0.65;
+
+          const lfo = this.ctx.createOscillator();
+          lfo.type = 'sine';
+          lfo.frequency.value = 0.13; // ~7.7s calm ocean wave cycle
+          const lfoDepth = this.ctx.createGain();
+          lfoDepth.gain.value = 0.32;
+
+          lfo.connect(lfoDepth);
+          lfoDepth.connect(waveGain.gain);
+
+          src.connect(filter);
+          filter.connect(waveGain);
+          waveGain.connect(this.masterGain);
+          src.start();
+          lfo.start();
+          this.activeNodes.push(src, filter, waveGain, lfo, lfoDepth);
+        } else if (mode === 'alpha') {
+          // 432Hz Left + 442Hz Right (10Hz Alpha binaural focus) + soft 216Hz harmonic
+          const merger = this.ctx.createChannelMerger(2);
+          const oscL = this.ctx.createOscillator();
+          const oscR = this.ctx.createOscillator();
+          const sub = this.ctx.createOscillator();
+          oscL.type = 'sine'; oscL.frequency.value = 432;
+          oscR.type = 'sine'; oscR.frequency.value = 442;
+          sub.type = 'sine'; sub.frequency.value = 216;
+
+          const gMain = this.ctx.createGain();
+          gMain.gain.value = 0.18;
+          const gSub = this.ctx.createGain();
+          gSub.gain.value = 0.12;
+
+          oscL.connect(merger, 0, 0);
+          oscR.connect(merger, 0, 1);
+          merger.connect(gMain);
+          gMain.connect(this.masterGain);
+
+          sub.connect(gSub);
+          gSub.connect(this.masterGain);
+
+          oscL.start();
+          oscR.start();
+          sub.start();
+          this.activeNodes.push(oscL, oscR, sub, merger, gMain, gSub);
+        }
+      },
+
+      setVolume(pct) {
+        if (this.masterGain && this.ctx) {
+          this.masterGain.gain.setTargetAtTime((pct / 100) * 0.45, this.ctx.currentTime, 0.08);
+        }
+      },
+
+      playBell() {
+        this.ensureContext();
+        const now = this.ctx.currentTime;
+        const freqs = [528, 792, 1056];
+        freqs.forEach((f, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(f, now);
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.exponentialRampToValueAtTime(0.24 / (idx + 1), now + 0.04);
+          gain.gain.exponentialRampToValueAtTime(0.0008, now + 2.4);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 2.5);
+        });
+      }
+    };
+
+    function setAmbientSound(mode) {
+      state.pomodoro.ambientSound = mode;
+      saveState();
+      SoundSynth.play(mode);
+      syncSoundUI();
+    }
+
+    function cycleAmbientSoundQuick() {
+      const order = ['off', 'rain', 'ocean', 'alpha'];
+      const next = order[(order.indexOf(state.pomodoro.ambientSound || 'off') + 1) % order.length];
+      setAmbientSound(next);
+    }
+
+    function setAmbientVolume(val) {
+      state.pomodoro.ambientVolume = Number(val);
+      document.getElementById('ambient-volume-val').textContent = `${val}%`;
+      SoundSynth.setVolume(val);
+      saveState();
+    }
+
+    function playCompletionBell() {
+      SoundSynth.playBell();
+    }
+
+    function syncSoundUI() {
+      const mode = state.pomodoro.ambientSound || 'off';
+      const labels = { off: "O'chiq", rain: "Yomg'ir", ocean: 'Okean', alpha: '432Hz Alfa' };
+      document.querySelectorAll('.sound-btn').forEach(btn => {
+        const active = btn.dataset.sound === mode;
+        btn.classList.toggle('bg-indigo-500/35', active);
+        btn.classList.toggle('border-indigo-400', active);
+        btn.classList.toggle('text-white', active);
+      });
+      const zenSound = document.getElementById('zen-sound-btn');
+      if (zenSound) zenSound.textContent = `🎧 Ovoz: ${labels[mode] || "O'chiq"}`;
+      const volSlider = document.getElementById('ambient-volume-slider');
+      const volLbl = document.getElementById('ambient-volume-val');
+      if (volSlider) volSlider.value = state.pomodoro.ambientVolume ?? 45;
+      if (volLbl) volLbl.textContent = `${state.pomodoro.ambientVolume ?? 45}%`;
+    }
+
+    // ---------- Zen Focus Mode ----------
+    let zenActive = false;
+    function toggleZenMode(open) {
+      zenActive = open;
+      const overlay = document.getElementById('zen-overlay');
+      const shell = document.getElementById('app-shell');
+      if (open) {
+        overlay.classList.remove('hidden');
+        overlay.classList.add('flex');
+        shell.classList.add('hidden');
+        updatePomoUI();
+        updateZenClock();
+      } else {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('flex');
+        shell.classList.remove('hidden');
+      }
+    }
+
+    function updateZenClock() {
+      const el = document.getElementById('zen-clock');
+      if (!el) return;
+      const now = new Date();
+      el.textContent = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    }
+
+    // ---------- Habit Tracker & Statistics ----------
+    function calcHabitStreak(habit) {
+      const set = new Set(habit.history || []);
+      let streak = 0;
+      let offset = 0;
+      // Count today if done, otherwise start checking from yesterday
+      if (!set.has(getTodayISO(0))) offset = -1;
+      while (set.has(getTodayISO(offset))) {
+        streak++;
+        offset--;
+      }
+      return streak;
+    }
+
+    function addHabit(e) {
+      e.preventDefault();
+      const emoji = document.getElementById('habit-emoji-input').value.trim() || '✨';
+      const name = document.getElementById('habit-name-input').value.trim();
+      if (!name) return;
+      state.habits.unshift({ id: uid('hab'), emoji, name, history: [] });
+      document.getElementById('habit-name-input').value = '';
+      saveState();
+      renderHabits();
+      updateFilterAndStatCounters();
+      showToast(`🔥 "${name}" odati qo'shildi!`, 'success');
+    }
+
+    function toggleHabitToday(habitId) {
+      const h = state.habits.find(x => x.id === habitId);
+      if (!h) return;
+      const today = getTodayISO(0);
+      h.history = h.history || [];
+      if (h.history.includes(today)) {
+        h.history = h.history.filter(d => d !== today);
+      } else {
+        h.history.push(today);
+        showToast(`🔥 Ajoyib! "${h.name}" bugun bajarildi!`, 'success');
+      }
+      saveState();
+      renderHabits();
+      updateFilterAndStatCounters();
+    }
+
+    function deleteHabit(habitId) {
+      state.habits = state.habits.filter(h => h.id !== habitId);
+      saveState();
+      renderHabits();
+      updateFilterAndStatCounters();
+    }
+
+    function renderHabits() {
+      const container = document.getElementById('habits-list');
+      if (!container) return;
+      if (!state.habits.length) {
+        container.innerHTML = `<p class="text-xs text-slate-400 text-center py-8">Hali kunlik odatlar qo'shilmagan.</p>`;
+        return;
+      }
+      const today = getTodayISO(0);
+      const last7 = Array.from({ length: 7 }, (_, i) => getTodayISO(i - 6));
+      const dayShort = ['Ya', 'Du', 'Se', 'Ch', 'Pa', 'Ju', 'Sh'];
+
+      container.innerHTML = state.habits.map(h => {
+        const doneToday = (h.history || []).includes(today);
+        const streak = calcHabitStreak(h);
+        return `
+          <div class="glass-card tilt-card rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="flex items-center gap-3 min-w-0">
+              <button type="button" onclick="toggleHabitToday('${escapeHtml(h.id)}')" class="w-10 h-10 rounded-xl border flex items-center justify-center text-lg shrink-0 transition ${
+                doneToday ? 'bg-emerald-500/30 border-emerald-400 text-emerald-200 shadow-lg shadow-emerald-900/40' : 'bg-white/5 border-white/15 hover:border-indigo-400'
+              }" aria-label="Odatni belgilash">
+                ${doneToday ? '✅' : escapeHtml(h.emoji)}
+              </button>
+              <div class="min-w-0">
+                <p class="text-sm font-bold ${doneToday ? 'text-emerald-200' : 'text-white'} truncate">${escapeHtml(h.name)}</p>
+                <div class="flex items-center gap-2 mt-1">
+                  <span class="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-amber-500/20 border border-amber-400/35 text-amber-200">🔥 ${streak} kun streak</span>
+                  <span class="text-[11px] text-slate-400">${doneToday ? 'Bugun bajarildi' : 'Bugun kutilmoqda'}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between sm:justify-end gap-2">
+              <div class="flex items-center gap-1" title="So'nggi 7 kun">
+                ${last7.map(d => {
+                  const hit = (h.history || []).includes(d);
+                  const dow = dayShort[new Date(d + 'T12:00:00').getDay()];
+                  return `<span class="w-6 h-6 rounded-lg text-[10px] font-bold flex items-center justify-center ${hit ? 'bg-emerald-500/35 border border-emerald-400/50 text-emerald-100' : 'bg-white/5 border border-white/10 text-slate-500'}">${dow}</span>`;
+                }).join('')}
+              </div>
+              <button type="button" onclick="deleteHabit('${escapeHtml(h.id)}')" class="p-1.5 rounded-lg hover:bg-rose-500/25 text-slate-400 hover:text-rose-200 text-xs" aria-label="Odatni o'chirish">🗑️</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+      bindTiltCards();
+    }
+
+    function renderStatistics() {
+      // Weekly Pomodoro bar chart
+      const chart = document.getElementById('weekly-chart');
+      const dayNames = ['Yak', 'Dush', 'Sesh', 'Chor', 'Pay', 'Jum', 'Shan'];
+      const days = Array.from({ length: 7 }, (_, i) => {
+        const iso = getTodayISO(i - 6);
+        const mins = state.studyHistory.filter(s => s.date === iso).reduce((sum, s) => sum + (s.minutes || 0), 0);
+        return { iso, label: dayNames[new Date(iso + 'T12:00:00').getDay()], mins };
+      });
+      const maxMins = Math.max(50, ...days.map(d => d.mins));
+
+      if (chart) {
+        chart.innerHTML = days.map(d => {
+          const pct = Math.max(8, Math.round((d.mins / maxMins) * 100));
+          const isToday = d.iso === getTodayISO(0);
+          return `
+            <div class="flex flex-col items-center justify-end h-full gap-1.5">
+              <span class="text-[10px] font-mono text-slate-300">${d.mins > 0 ? d.mins : ''}</span>
+              <div class="w-full max-w-[34px] rounded-t-xl transition-all duration-500 ${isToday ? 'bg-gradient-to-t from-indigo-500 to-cyan-400 shadow-lg shadow-indigo-500/40' : 'bg-white/15'}" style="height:${pct}%"></div>
+              <span class="text-[10px] font-semibold ${isToday ? 'text-cyan-300' : 'text-slate-400'}">${d.label}</span>
+            </div>
+          `;
+        }).join('');
+      }
+
+      const totalPomos = state.studyHistory.length;
+      const totalMins = state.studyHistory.reduce((s, x) => s + (x.minutes || 0), 0);
+      document.getElementById('stats-total-pomos').textContent = `${totalPomos} 🍅`;
+      document.getElementById('stats-total-minutes').textContent = `${(totalMins / 60).toFixed(1)} soat`;
+
+      // Category breakdown
+      const catRoot = document.getElementById('category-stats-list');
+      if (catRoot) {
+        catRoot.innerHTML = state.categories.map(cat => {
+          const items = state.tasks.filter(t => t.categoryId === cat.id);
+          const done = items.filter(t => t.status === 'done').length;
+          const pct = items.length ? Math.round((done / items.length) * 100) : 0;
+          return `
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between text-xs">
+                <span class="font-semibold text-slate-200 flex items-center gap-1.5"><span>${escapeHtml(cat.emoji)}</span> <span>${escapeHtml(cat.name)}</span></span>
+                <span class="font-mono text-slate-300">${done}/${items.length} (${pct}%)</span>
+              </div>
+              <div class="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                <div class="h-full rounded-full transition-all duration-500" style="width:${pct}%; background:${escapeHtml(cat.color)};"></div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    // ---------- Settings, Export, Import, Reset Demo ----------
+    function openSettingsModal() {
+      const raw = localStorage.getItem(STORAGE_KEY) || '';
+      const kb = (new Blob([raw]).size / 1024).toFixed(1);
+      document.getElementById('settings-storage-size').textContent = `${kb} KB`;
+      document.getElementById('settings-storage-counts').innerHTML = `
+        <span class="px-2 py-0.5 rounded-lg bg-white/10">📋 ${state.tasks.length} vazifa</span>
+        <span class="px-2 py-0.5 rounded-lg bg-white/10">🏷️ ${state.categories.length} kategoriya</span>
+        <span class="px-2 py-0.5 rounded-lg bg-white/10">🍅 ${state.studyHistory.length} sessiya</span>
+        <span class="px-2 py-0.5 rounded-lg bg-white/10">🖼️ ${state.customWallpapers.length} shaxsiy fon</span>
+      `;
+      document.getElementById('settings-dialog').showModal();
+    }
+
+    function exportWorkspaceJson() {
+      try {
+        const dataStr = JSON.stringify(state, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `fokus3d-studio-backup-${getTodayISO(0)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        showToast('⬇️ Zaxira nusxa (.json) yuklab olindi!', 'success');
+      } catch (err) {
+        showToast('❌ Eksport qilishda xatolik yuz berdi.', 'error');
+      }
+    }
+
+    document.getElementById('json-import-input').addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const parsed = JSON.parse(ev.target.result);
+          if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.tasks)) {
+            throw new Error("Noto'g'ri format");
+          }
+          state = { ...createDemoState(), ...parsed };
+          saveState();
+          hydrateAllUI();
+          document.getElementById('settings-dialog').close();
+          showToast('⬆️ Ma\'lumotlar muvaffaqiyatli import qilindi!', 'success');
+        } catch (err) {
+          showToast('❌ JSON fayl formati yaroqsiz!', 'error');
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    });
+
+    function resetDemoData() {
+      if (!confirm("Hozirgi ma'lumotlaringiz o'rniga boshlang'ich namunaviy ma'lumotlar tiklansinmi?")) return;
+      SoundSynth.stopAmbient();
+      stopPomoInterval();
+      state = createDemoState();
+      saveState();
+      hydrateAllUI();
+      document.getElementById('settings-dialog').close();
+      showToast('🔄 Boshlang\'ich namunaviy ma\'lumotlar tiklandi!', 'info');
+    }
+
+    // ---------- Keyboard Shortcuts ----------
+    document.addEventListener('keydown', (e) => {
+      const tag = document.activeElement?.tagName;
+      const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      const anyDialogOpen = Boolean(document.querySelector('dialog[open]'));
+
+      if (e.key === 'Escape' && zenActive) {
+        toggleZenMode(false);
+        return;
+      }
+      if (isTyping || anyDialogOpen) return;
+
+      if (e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        openTaskModal();
+      } else if (e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        toggleZenMode(!zenActive);
+      } else if (e.code === 'Space') {
+        e.preventDefault();
+        togglePomoTimer();
+      }
+    });
+
+    // ---------- Initial Hydration ----------
+    function hydrateAllUI() {
+      document.getElementById('header-date-line').textContent = formatUzDate(new Date());
+      document.getElementById('task-sort-select').value = state.taskSort || 'deadline';
+      document.getElementById('custom-pomo-minutes').value = state.pomodoro.customMinutes || 35;
+
+      const mins = getModeMinutes(state.pomodoro.mode || 'pomodoro');
+      pomoRuntime.totalSeconds = mins * 60;
+      pomoRuntime.remainingSeconds = mins * 60;
+
+      applyWallpaperVisuals();
+      syncThreeUi();
+      renderMoodAndQuote();
+      renderSidebarCategories();
+      renderPomoTaskOptions();
+      renderStudyBlocks();
+      renderStudyHistory();
+      renderWallpaperGallery();
+      renderHabits();
+      renderStatistics();
+      syncSoundUI();
+      updatePomoUI();
+      switchSection(state.activeSection || 'tasks');
+
+      if (ThreeEngine.initialized) {
+        ThreeEngine.setMode(state.threeEffect || 'crystals');
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      setupDialogLightDismissFallback();
+      hydrateAllUI();
+
+      // Initialize Three.js once deferred script is ready
+      const waitThree = () => {
+        if (typeof THREE !== 'undefined') {
+          ThreeEngine.init();
+        } else {
+          setTimeout(waitThree, 120);
+        }
+      };
+      waitThree();
+
+      // Auto-refresh deadline badges & Zen clock every 30s
+      setInterval(() => {
+        updateZenClock();
+        if (state.activeSection === 'tasks') renderTasksView();
+      }, 30000);
+    });
+  </script>
+</body>
+</html>
